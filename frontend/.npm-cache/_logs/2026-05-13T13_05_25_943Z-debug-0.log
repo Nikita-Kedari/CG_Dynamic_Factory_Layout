@@ -1,0 +1,88 @@
+0 verbose cli C:\Program Files\nodejs\node.exe C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@10.8.2
+2 info using node@v20.19.0
+3 silly config load:file:C:\Program Files\nodejs\node_modules\npm\npmrc
+4 silly config load:file:C:\Users\gujar\Desktop\Capgemini_Project\frontend\.npmrc
+5 silly config load:file:C:\Users\gujar\.npmrc
+6 silly config load:file:C:\Users\gujar\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm install
+8 verbose argv "install" "--cache" ".\\.npm-cache"
+9 verbose logfile logs-max:10 dir:C:\Users\gujar\Desktop\Capgemini_Project\frontend\.npm-cache\_logs\2026-05-13T13_05_25_943Z-
+10 verbose logfile C:\Users\gujar\Desktop\Capgemini_Project\frontend\.npm-cache\_logs\2026-05-13T13_05_25_943Z-debug-0.log
+11 silly packumentCache heap:4345298944 maxSize:1086324736 maxEntrySize:543162368
+12 silly logfile done cleaning log files
+13 silly idealTree buildDeps
+14 silly fetch manifest picomatch@^3 || ^4
+15 silly packumentCache full:https://registry.npmjs.org/picomatch cache-miss
+16 http fetch GET 200 https://registry.npmjs.org/picomatch 150ms (cache miss)
+17 silly packumentCache full:https://registry.npmjs.org/picomatch set size:undefined disposed:false
+18 silly placeDep ROOT picomatch@4.0.4 REPLACE for: fdir@6.5.0 want: ^3 || ^4
+19 silly fetch manifest picomatch@^2.0.4
+20 silly packumentCache full:https://registry.npmjs.org/picomatch cache-miss
+21 http fetch GET 200 https://registry.npmjs.org/picomatch 7ms (cache hit)
+22 silly packumentCache full:https://registry.npmjs.org/picomatch set size:126376 disposed:false
+23 silly placeDep node_modules/anymatch picomatch@2.3.2 OK for: anymatch@3.1.3 want: ^2.0.4
+24 silly fetch manifest picomatch@^2.3.1
+25 silly packumentCache full:https://registry.npmjs.org/picomatch cache-hit
+26 silly placeDep node_modules/micromatch picomatch@2.3.2 OK for: micromatch@4.0.8 want: ^2.3.1
+27 silly fetch manifest date-fns@^2.28.0 || ^3.0.0
+28 silly packumentCache full:https://registry.npmjs.org/date-fns cache-miss
+29 http fetch GET 200 https://registry.npmjs.org/npm 469ms
+30 http fetch GET 200 https://registry.npmjs.org/date-fns 569ms (cache miss)
+31 silly packumentCache full:https://registry.npmjs.org/date-fns set size:undefined disposed:false
+32 silly fetch manifest react@^16.8.0 || ^17.0.0 || ^18.0.0
+33 silly packumentCache full:https://registry.npmjs.org/react cache-miss
+34 http fetch GET 200 https://registry.npmjs.org/react 720ms (cache miss)
+35 silly packumentCache full:https://registry.npmjs.org/react set size:undefined disposed:false
+36 verbose stack Error: could not resolve
+36 verbose stack     at PlaceDep.failPeerConflict (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\place-dep.js:503:25)
+36 verbose stack     at new PlaceDep (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\place-dep.js:157:21)
+36 verbose stack     at #buildDepStep (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:917:18)
+36 verbose stack     at async Arborist.buildIdealTree (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:181:7)
+36 verbose stack     at async Promise.all (index 1)
+36 verbose stack     at async Arborist.reify (C:\Program Files\nodejs\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\reify.js:131:5)
+36 verbose stack     at async Install.exec (C:\Program Files\nodejs\node_modules\npm\lib\commands\install.js:150:5)
+36 verbose stack     at async Npm.exec (C:\Program Files\nodejs\node_modules\npm\lib\npm.js:207:9)
+36 verbose stack     at async module.exports (C:\Program Files\nodejs\node_modules\npm\lib\cli\entry.js:74:5)
+37 error code ERESOLVE
+38 error ERESOLVE could not resolve
+39 error
+40 error While resolving: react-day-picker@8.10.1
+40 error Found: date-fns@4.1.0
+40 error node_modules/date-fns
+40 error   date-fns@"4.1.0" from the root project
+40 error
+40 error Could not resolve dependency:
+40 error peer date-fns@"^2.28.0 || ^3.0.0" from react-day-picker@8.10.1
+40 error node_modules/react-day-picker
+40 error   react-day-picker@"8.10.1" from the root project
+40 error
+40 error Conflicting peer dependency: date-fns@3.6.0
+40 error node_modules/date-fns
+40 error   peer date-fns@"^2.28.0 || ^3.0.0" from react-day-picker@8.10.1
+40 error   node_modules/react-day-picker
+40 error     react-day-picker@"8.10.1" from the root project
+40 error
+40 error Fix the upstream dependency conflict, or retry
+40 error this command with --force or --legacy-peer-deps
+40 error to accept an incorrect (and potentially broken) dependency resolution.
+41 error
+41 error
+41 error For a full report see:
+41 error C:\Users\gujar\Desktop\Capgemini_Project\frontend\.npm-cache\_logs\2026-05-13T13_05_25_943Z-eresolve-report.txt
+42 silly unfinished npm timer reify 1778677526304
+43 silly unfinished npm timer reify:loadTrees 1778677526341
+44 silly unfinished npm timer idealTree:buildDeps 1778677526453
+45 silly unfinished npm timer idealTree:node_modules/react-day-picker 1778677526624
+46 verbose cwd C:\Users\gujar\Desktop\Capgemini_Project\frontend
+47 verbose os Windows_NT 10.0.26200
+48 verbose node v20.19.0
+49 verbose npm  v10.8.2
+50 notice
+50 notice New major version of npm available! 10.8.2 -> 11.14.1
+50 notice Changelog: https://github.com/npm/cli/releases/tag/v11.14.1
+50 notice To update run: npm install -g npm@11.14.1
+50 notice  { force: true, [Symbol(proc-log.meta)]: true }
+51 verbose exit 1
+52 verbose code 1
+53 error A complete log of this run can be found in: C:\Users\gujar\Desktop\Capgemini_Project\frontend\.npm-cache\_logs\2026-05-13T13_05_25_943Z-debug-0.log

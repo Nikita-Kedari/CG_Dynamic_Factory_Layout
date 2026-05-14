@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<filters>
+  <!-- Identification -->
+  <filter id="ws_id" label="WS (Workstation ID)" default="true" category="Identification" description="The unique workstation code (e.g. W1)" icon="Fingerprint" />
+  <filter id="process" label="Process" default="true" category="Identification" description="The operations process name (e.g. Base Loading)" icon="Tag" />
+  <filter id="process_type" label="Process Type" default="true" category="Identification" description="The process category classification" icon="Tag" />
+  <filter id="machine" label="Machine" default="true" category="Equipment" description="The machine / equipment type (e.g. Conveyor)" icon="Cpu" />
+  <filter id="machine_type" label="Machine Type" default="true" category="Equipment" description="The machine classification type" icon="Cpu" />
+  <filter id="key_function" label="Key Function" default="true" category="Equipment" description="The workstation's primary operation function" icon="Target" />
+  <filter id="critical_hover_kpis" label="Critical Hover KPIs" default="true" category="KPI" description="KPIs specified for hover display" icon="Clipboard" />
+
+  
+  <!-- Status & Process -->
+  <filter id="status" label="Status" default="true" category="Process" description="Current Operating Status (Running, Idle, Bottleneck, Down, Critical)" icon="Activity" />
+  <filter id="cycle_time" label="Cycle Time (s)" default="true" category="Process" description="Actual and Target process time in seconds" icon="Clock" />
+  <filter id="throughput" label="Throughput (units/hr)" default="true" category="Process" description="Hourly unit production rate" icon="Zap" />
+  
+  <!-- Reliability & Quality -->
+  <filter id="oee" label="OEE (%)" default="true" category="Reliability" description="Overall Equipment Effectiveness percentage" icon="Percent" />
+  <filter id="mtbf" label="MTBF (hrs)" default="true" category="Reliability" description="Mean Time Between Failures in hours" icon="Calendar" />
+  <filter id="mttr" label="MTTR (min)" default="true" category="Reliability" description="Mean Time To Repair in minutes" icon="Wrench" />
+  <filter id="quality" label="Quality (%)" default="true" category="Reliability" description="First-time-through quality yield percentage" icon="ShieldCheck" />
+  
+  <!-- KPI -->
+  <filter id="special_kpi" label="Special KPI" default="true" category="KPI" description="Specific custom Key Performance Indicators" icon="Star" />
+</filters>

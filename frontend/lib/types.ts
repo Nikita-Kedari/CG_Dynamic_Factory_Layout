@@ -43,6 +43,7 @@ export interface Line {
   height: number;
   workCenters: WorkCenter[];
   color?: string;
+  lineType?: 'Straight' | 'L-Type' | 'U-Type' | 'Inverted U-Type';
 }
 
 // Buffer - temporary storage between lines

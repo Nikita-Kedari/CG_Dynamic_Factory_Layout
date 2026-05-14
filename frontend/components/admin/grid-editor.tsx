@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-import { ZoomIn, ZoomOut, Maximize2, Grid3x3, RotateCcw, Save, ArrowLeft, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Grid3x3, RotateCcw, Save, ArrowLeft, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { threeAssembliesFactory } from '@/lib/three-assemblies';
+import { parseCSV } from '@/lib/csv-handler';
 
 interface GridEditorProps {
   onSave?: (factory: any) => void;
@@ -123,12 +124,69 @@ const EXCEL_WORKSTATIONS: Record<string, {
   w27: { ws_id: 'W27', process: 'Dispatch', machine: 'Conveyor', status: 'Running', cycle_time: '18', oee: '96', throughput: '150', mtbf: '240', mttr: '4', quality: '—', special_kpi: 'Queue: 1', process_type: 'Dispatch', machine_type: 'Conveyor', key_function: 'Send to next stage', critical_hover_kpis: 'Throughput', orders: 'ORD-027' },
 };
 
+const validateLineFit = (area: any, line: any, type: string) => {
+  const count = line.workCenters?.length || 0;
+  if (count === 0) return { fits: true };
+
+  // Approximate space per machine (100x100 with gap)
+  const unitSize = 100;
+  let reqW = 0, reqH = 0;
+
+  switch (type) {
+    case 'L-Type':
+      reqW = Math.ceil(count / 2) * unitSize;
+      reqH = Math.ceil(count / 2) * unitSize;
+      break;
+    case 'U-Type':
+    case 'Inverted U-Type':
+      reqW = Math.ceil(count / 3) * unitSize;
+      reqH = 3 * unitSize;
+      break;
+    case 'Straight':
+    default:
+      reqW = count * unitSize;
+      reqH = unitSize;
+      break;
+  }
+
+  const fits = area.width >= reqW && area.height >= reqH;
+  return { fits, reqW, reqH };
+};
+
 export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly = false, layoutId = null }: GridEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number>(0);
 
   const [factory, setFactory] = useState(initialFactory || threeAssembliesFactory);
+  
+  // History for Undo/Redo
+  const [history, setHistory] = useState<any[]>([]);
+  const [future, setFuture] = useState<any[]>([]);
+
+  const updateFactory = (newFactory: any, recordHistory = true) => {
+    if (recordHistory) {
+      setHistory(prev => [...prev, factory]);
+      setFuture([]);
+    }
+    setFactory(newFactory);
+  };
+
+  const undo = () => {
+    if (history.length === 0) return;
+    const prev = history[history.length - 1];
+    setFuture(f => [factory, ...f]);
+    setHistory(h => h.slice(0, -1));
+    setFactory(prev);
+  };
+
+  const redo = () => {
+    if (future.length === 0) return;
+    const next = future[0];
+    setHistory(h => [...h, factory]);
+    setFuture(f => f.slice(1));
+    setFactory(next);
+  };
   const [showGrid, setShowGrid] = useState(true);
   const [savedMsg, setSavedMsg] = useState(false);
   const [shareMsg, setShareMsg] = useState(false);
@@ -143,6 +201,8 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   const [hoveredEntity, setHoveredEntity] = useState<{ type: 'area' | 'machine'; id: string } | null>(null);
   const [tooltipState, setTooltipState] = useState<{ x: number, y: number, wc?: any, text?: string } | null>(null);
   const [draggingMachine, setDraggingMachine] = useState<{ id: string, areaId: string, lineId: string } | null>(null);
+  const [draggingAreaId, setDraggingAreaId] = useState<string | null>(null);
+  const dragOffsetRef = useRef({ x: 0, y: 0 });
   const [areaLayoutTypes, setAreaLayoutTypes] = useState<Record<string, string>>({});
   const [collapsedAreas, setCollapsedAreas] = useState<Record<string, boolean>>({});
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -150,6 +210,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   const [editingHeight, setEditingHeight] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [tempAreaSize, setTempAreaSize] = useState<Record<string, { w?: number, h?: number }>>({});
 
   const [allFilters, setAllFilters] = useState<any[]>([
     { id: 'ws_id', label: 'Workstation ID', default: true, category: 'Identification', description: 'Unique identifier', icon: 'Fingerprint' },
@@ -229,6 +290,21 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     const interval = setInterval(fetchAll, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  // Keyboard Shortcuts for Undo/Redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'z') {
+        e.preventDefault();
+        undo();
+      } else if (e.ctrlKey && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo, history, future]);
 
   // Pan state
   const isPanningRef = useRef(false);
@@ -706,6 +782,24 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       return;
     }
 
+    // Check for Area Header click
+    let foundAreaId: string | null = null;
+    factory?.areas?.forEach((area: any) => {
+        const headerH = 45;
+        if (mx >= area.x && mx <= area.x + area.width && my >= area.y && my <= area.y + headerH) {
+            foundAreaId = area.id;
+        }
+    });
+
+    if (foundAreaId && !isAdmin && !readOnly) {
+        setDraggingAreaId(foundAreaId);
+        const area = factory.areas.find((a: any) => a.id === foundAreaId);
+        dragOffsetRef.current = { x: mx - area.x, y: my - area.y };
+        setSelectedAreaId(foundAreaId);
+        e.preventDefault();
+        return;
+    }
+
     isPanningRef.current = true;
     hasDraggedRef.current = false;
     panStartRef.current = {
@@ -745,7 +839,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
 
     // Handle Dragging
     if (draggingMachine) {
-      setFactory((prev: any) => {
+      updateFactory((prev: any) => {
         const newFactory = { ...prev };
         const area = newFactory.areas?.find((a: any) => a.id === draggingMachine.areaId);
         if (!area) return prev;
@@ -763,6 +857,9 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
         if (newY < area.y + headerH) newY = area.y + headerH;
         if (newX + wc.width > area.x + area.width - 5) newX = area.x + area.width - wc.width - 5;
         if (newY + wc.height > area.y + area.height - 5) newY = area.y + area.height - wc.height - 5;
+
+        wc.x = newX;
+        wc.y = newY;
 
         // Check collision with other workstations and push them
         const oldX = wc.x;
@@ -818,6 +915,35 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       return; // Skip hover updates while dragging
     }
 
+    if (draggingAreaId && !isAdmin && !readOnly) {
+        updateFactory((prev: any) => {
+            const newFactory = { ...prev };
+            const area = newFactory.areas.find((a: any) => a.id === draggingAreaId);
+            if (!area) return prev;
+
+            const newX = Math.round(mx - dragOffsetRef.current.x);
+            const newY = Math.round(my - dragOffsetRef.current.y);
+            const dx = newX - area.x;
+            const dy = newY - area.y;
+
+            area.x = newX;
+            area.y = newY;
+
+            // Move lines and workstations
+            area.lines.forEach((l: any) => {
+                l.x += dx;
+                l.y += dy;
+                l.workCenters.forEach((w: any) => {
+                    w.x += dx;
+                    w.y += dy;
+                });
+            });
+
+            return newFactory;
+        });
+        return;
+    }
+
     // Hover detection
     let found: { type: 'area' | 'machine'; id: string } | null = null;
     let newTooltip = null;
@@ -851,6 +977,8 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    setDraggingMachine(null);
+    setDraggingAreaId(null);
     if (!hasDraggedRef.current) {
       // It was a click — hit test
       const canvas = canvasRef.current;
@@ -935,140 +1063,22 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      const text = event.target?.result as string;
-      if (!text) return;
-      const lines = text.split('\n').filter(l => l.trim() !== '');
-      if (lines.length < 2) return;
-
-      const wsDetails: any[] = [];
-      const flows: any[] = [];
-
-      let factoryId = '101', factoryName = 'Automotive Plant';
-      const areasMap = new Map<string, any>();
-
-      for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i].split(',');
-        if (parts.length < 30) continue;
-
-        factoryId = parts[0] || factoryId;
-        factoryName = parts[1] || factoryName;
-        const areaId = parts[9] || '11';
-        const areaName = parts[10] || 'Assembly Area';
-        const lineId = parts[15] || '201';
-        const lineName = parts[16] || 'Assembly Line';
-
-        const wId = parts[22];
-        const wName = parts[23];
-        const wSeq = parseInt(parts[24]) || 0;
-        const wX = parseFloat(parts[25]);
-        const wY = parseFloat(parts[26]);
-        const wW = parseFloat(parts[27]);
-        const wH = parseFloat(parts[28]);
-        const mName = parts[30];
-
-        const fId = parts[35];
-        const fFrom = parts[36];
-        const fTo = parts[37];
-        const fType = parts[38];
-        const fLabel = parts[39];
-        const detail = parts.slice(40).join(',');
-
-        if (!areasMap.has(areaId)) {
-          areasMap.set(areaId, {
-            id: areaId, areaId: areaId, areaName: areaName,
-            x: 50, y: 50, width: 800, height: 600,
-            lines: [{ id: lineId, lineId: lineId, lineName: lineName, x: 50, y: 50, width: 800, height: 600, workCenters: [] }],
-            buffers: [], storage: []
-          });
+      const csvContent = event.target?.result as string;
+      try {
+        const newLayout = parseCSV(csvContent);
+        updateFactory(newLayout);
+        
+        if (newLayout.areas.length > 0) {
+          const firstArea = newLayout.areas[0];
+          setViewState(prev => ({ 
+            ...prev, 
+            targetZoom: 0.6, 
+            targetPanX: -firstArea.x + 250, 
+            targetPanY: -firstArea.y + 150 
+          }));
         }
-
-        const area = areasMap.get(areaId);
-
-        area.lines[0].workCenters.push({
-          id: wId,
-          workCenterId: wId,
-          machineName: wName || mName,
-          name: wName,
-          ws_id: wId,
-          ws_name: wName,
-          ws_sequence: wSeq,
-          machine_id: parts[29] || '',
-          machine_name: mName || '',
-          wsSequence: wSeq,
-          x: wX * 2.5,
-          y: wY * 2.5,
-          width: Math.max(wW * 6, 90),
-          height: Math.max(wH * 6, 90),
-          icon: 'tool',
-          status: 'operational',
-          detail: detail.replace(/"/g, '').trim()
-        });
-
-        if (fId && fFrom && fTo) {
-          flows.push({ id: fId, fromWsId: fFrom, toWsId: parseFloat(fTo).toString(), arrowType: fType, label: fLabel });
-        }
-      }
-
-      const areas = Array.from(areasMap.values());
-      let globalMaxX = -Infinity, globalMaxY = -Infinity;
-
-      areas.forEach((area: any) => {
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        area.lines[0].workCenters.forEach((w: any) => {
-          if (w.x < minX) minX = w.x;
-          if (w.y < minY) minY = w.y;
-          if (w.x + w.width > maxX) maxX = w.x + w.width;
-          if (w.y + w.height > maxY) maxY = w.y + w.height;
-        });
-
-        if (minX === Infinity) { minX = 100; maxX = 900; minY = 100; maxY = 700; }
-
-        area.x = minX - 100;
-        area.y = minY - 100;
-        area.width = (maxX - minX) + 200;
-        area.height = (maxY - minY) + 150;
-        area.lines[0].x = area.x;
-        area.lines[0].y = area.y;
-        area.lines[0].width = area.width;
-        area.lines[0].height = area.height;
-
-        if (area.x + area.width > globalMaxX) globalMaxX = area.x + area.width;
-        if (area.y + area.height > globalMaxY) globalMaxY = area.y + area.height;
-      });
-
-      for (let i = 0; i < areas.length; i++) {
-        for (let j = 0; j < i; j++) {
-          const area = areas[i];
-          const other = areas[j];
-          const overlaps = (
-            area.x < other.x + other.width + 50 &&
-            area.x + area.width + 50 > other.x &&
-            area.y < other.y + other.height + 50 &&
-            area.y + area.height + 50 > other.y
-          );
-          if (overlaps) {
-            const dx = (other.x + other.width + 50) - area.x;
-            area.x += dx;
-            area.lines[0].x += dx;
-            area.lines[0].workCenters.forEach((w: any) => { w.x += dx; });
-          }
-        }
-      }
-
-      if (areas.length > 0) {
-        globalMaxX = Math.max(...areas.map((a: any) => a.x + a.width));
-        globalMaxY = Math.max(...areas.map((a: any) => a.y + a.height));
-      }
-
-      const newLayout = {
-        id: factoryId, name: factoryName, width: Math.max(2000, globalMaxX + 500), height: Math.max(1500, globalMaxY + 500), gridUnit: 50,
-        flows,
-        areas: areas
-      };
-
-      setFactory(newLayout);
-      if (areas.length > 0) {
-        setViewState(prev => ({ ...prev, targetZoom: 0.6, targetPanX: -areas[0].x + 250, targetPanY: -areas[0].y + 150 }));
+      } catch (err: any) {
+        alert(err.message);
       }
     };
     reader.readAsText(file);
@@ -1117,7 +1127,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
 
   const applyAutoLayout = (areaId: string, type: string, manualWidth?: number, manualHeight?: number, clampToFit: boolean = false) => {
     setAreaLayoutTypes(prev => ({ ...prev, [areaId]: type }));
-    setFactory((prev: any) => {
+    updateFactory((prev: any) => {
       const nf = { ...prev };
       const area = nf.areas?.find((a: any) => a.id === areaId);
       if (!area || !area.lines?.[0]) return prev;
@@ -1127,12 +1137,12 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       const N = wcs.length;
       let maxX = 0; let maxY = 0;
 
-      if (type === 'Straight') {
+      if (type === 'Straight' || type === 'Straight Line') {
         wcs.forEach((wc: any, i: number) => {
           wc._cx = i; wc._cy = 0;
           if (i > maxX) maxX = i;
         });
-      } else if (type === 'L-Shape') {
+      } else if (type === 'L-Shape' || type === 'L-Type') {
         const half = Math.ceil(N / 2);
         wcs.forEach((wc: any, i: number) => {
           if (i < half) { wc._cx = i; wc._cy = 0; }
@@ -1140,7 +1150,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
           if (wc._cx > maxX) maxX = wc._cx;
           if (wc._cy > maxY) maxY = wc._cy;
         });
-      } else if (type === 'U-Shape') {
+      } else if (type === 'U-Shape' || type === 'U-Type') {
         const side = Math.max(1, Math.ceil(N / 3));
         wcs.forEach((wc: any, i: number) => {
           let cx = 0, cy = 0;
@@ -1156,7 +1166,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
           if (wc._cx > maxX) maxX = wc._cx;
           if (wc._cy > maxY) maxY = wc._cy;
         });
-      } else if (type === 'Inverted U-Shape') {
+      } else if (type === 'Inverted U-Shape' || type === 'Inverted U-Type') {
         const side = Math.max(1, Math.ceil(N / 3));
         wcs.forEach((wc: any, i: number) => {
           let cx = 0, cy = 0;
@@ -1374,14 +1384,14 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
             <Upload className="mr-2 h-4 w-4 rotate-45" /> {shareMsg ? 'Link Copied ✓' : 'Share Layout URL'}
           </Button>
           <Button onClick={() => {
-            const canvas = canvasRef.current;
-            if (!canvas) return;
-            const link = document.createElement('a');
-            link.download = `factory_layout_blueprint.png`;
-            link.href = canvas.toDataURL('image/png');
-            link.click();
+            const a = document.createElement('a');
+            a.href = '/factory_layout_base.csv';
+            a.download = 'factory_layout_base.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
           }} className="bg-[#1e293b] hover:bg-[#334155] text-white border border-[#334155] shadow-lg rounded-xl h-10 px-4">
-            <Download className="mr-2 h-4 w-4" /> Download Blueprint
+            <Download className="mr-2 h-4 w-4" /> Download Base CSV
           </Button>
         </div>
 
@@ -1430,6 +1440,28 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
           >
             <Maximize2 className="h-5 w-5" />
           </Button>
+          
+          {!isAdmin && (
+            <>
+              <div className="h-px bg-[#334155] my-1"></div>
+              <Button
+                onClick={undo}
+                disabled={history.length === 0}
+                className="bg-[#1e293b] hover:bg-[#334155] text-white border border-[#334155] shadow-lg rounded-xl h-10 w-10 p-0 disabled:opacity-30"
+                title="Undo (Ctrl+Z)"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+              <Button
+                onClick={redo}
+                disabled={future.length === 0}
+                className="bg-[#1e293b] hover:bg-[#334155] text-white border border-[#334155] shadow-lg rounded-xl h-10 w-10 p-0 disabled:opacity-30"
+                title="Redo (Ctrl+Y)"
+              >
+                <RotateCcw className="h-4 w-4 scale-x-[-1]" />
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Legend */}
@@ -1639,7 +1671,162 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
                 </div>
 
                 {!collapsedAreas[area.id] && (
-                  <div className="pl-9 pr-1 py-1 space-y-1 border-l border-slate-100 ml-4">
+                  <div className="pl-9 pr-1 py-1 space-y-3 border-l border-slate-100 ml-4">
+                    {/* Line Settings Section */}
+                    {area.lines?.map((line: any) => {
+                      const { fits, reqW, reqH } = validateLineFit(area, line, line.lineType || 'Straight');
+                      return (
+                        <div key={`line-settings-${line.id}`} className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase">Line Type</span>
+                            {!fits && (
+                                <div className="flex items-center gap-1 text-[9px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded animate-pulse" title={`Requires ${reqW}x${reqH}, but area is ${area.width}x${area.height}`}>
+                                    <AlertCircle className="h-3 w-3" /> Doesn't Fit
+                                </div>
+                            )}
+                          </div>
+                          <select 
+                            value={line.lineType || 'Straight'}
+                            onChange={(e) => {
+                              const newType = e.target.value;
+                              const newFactory = JSON.parse(JSON.stringify(factory));
+                              const targetArea = newFactory.areas.find((a: any) => a.id === area.id);
+                              const targetLine = targetArea.lines.find((l: any) => l.id === line.id);
+                              targetLine.lineType = newType;
+                              updateFactory(newFactory);
+                              
+                              // Align workstations based on selected type
+                              applyAutoLayout(area.id, newType);
+                            }}
+                            className="w-full text-xs bg-white border border-slate-200 rounded p-1 outline-none focus:border-indigo-500 transition-all"
+                          >
+                            <option value="Straight">Straight Line</option>
+                            <option value="L-Type">L-Type</option>
+                            <option value="U-Type">U-Type</option>
+                            <option value="Inverted U-Type">Inverted U-Type</option>
+                          </select>
+                        </div>
+                      );
+                    })}
+
+                    {/* Area Dimensions Section */}
+                    <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase">Area Bounds</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[9px] text-slate-400 font-bold uppercase mb-1 block">X Pos</label>
+                          <input 
+                            type="number" 
+                            value={Math.round(area.x)} 
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              const newFactory = JSON.parse(JSON.stringify(factory));
+                              const targetArea = newFactory.areas.find((a: any) => a.id === area.id);
+                              const dx = val - targetArea.x;
+                              targetArea.x = val;
+                              // Also move everything inside the area
+                              targetArea.lines.forEach((l: any) => {
+                                l.x += dx;
+                                l.workCenters.forEach((w: any) => w.x += dx);
+                              });
+                              updateFactory(newFactory);
+                            }}
+                            className="w-full text-xs border border-slate-200 rounded p-1.5 outline-none focus:border-indigo-500" 
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] text-slate-400 font-bold uppercase mb-1 block">Y Pos</label>
+                          <input 
+                            type="number" 
+                            value={Math.round(area.y)} 
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              const newFactory = JSON.parse(JSON.stringify(factory));
+                              const targetArea = newFactory.areas.find((a: any) => a.id === area.id);
+                              const dy = val - targetArea.y;
+                              targetArea.y = val;
+                              targetArea.lines.forEach((l: any) => {
+                                l.y += dy;
+                                l.workCenters.forEach((w: any) => w.y += dy);
+                              });
+                              updateFactory(newFactory);
+                            }}
+                            className="w-full text-xs border border-slate-200 rounded p-1.5 outline-none focus:border-indigo-500" 
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] text-slate-400 font-bold uppercase mb-1 block">Width</label>
+                          <input 
+                            type="number" 
+                            value={tempAreaSize[area.id]?.w ?? Math.round(area.width)} 
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              setTempAreaSize(prev => ({ ...prev, [area.id]: { ...prev[area.id], w: val } }));
+                            }}
+                            onBlur={(e) => {
+                              const inputVal = parseInt(e.target.value) || 200;
+                              const newFactory = JSON.parse(JSON.stringify(factory));
+                              const targetArea = newFactory.areas.find((a: any) => a.id === area.id);
+                              
+                              let minW = 200;
+                              targetArea.lines.forEach((l: any) => {
+                                const { reqW } = validateLineFit(targetArea, l, l.lineType || 'Straight');
+                                if (reqW + 100 > minW) minW = reqW + 100;
+                              });
+
+                              const finalVal = Math.max(minW, inputVal);
+                              targetArea.width = finalVal;
+                              targetArea.lines.forEach((l: any) => l.width = finalVal);
+                              setTempAreaSize(prev => {
+                                const next = { ...prev };
+                                delete next[area.id]?.w;
+                                return next;
+                              });
+                              updateFactory(newFactory);
+                            }}
+                            className="w-full text-xs border border-slate-200 rounded p-1.5 outline-none focus:border-indigo-500" 
+                          />
+                          <p className="text-[8px] text-slate-400 mt-1 italic">Min: {area.lines?.reduce((max: number, l: any) => Math.max(max, validateLineFit(area, l, l.lineType || 'Straight').reqW + 100), 200)}px</p>
+                        </div>
+                        <div>
+                          <label className="text-[9px] text-slate-400 font-bold uppercase mb-1 block">Height</label>
+                          <input 
+                            type="number" 
+                            value={tempAreaSize[area.id]?.h ?? Math.round(area.height)} 
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value) || 0;
+                              setTempAreaSize(prev => ({ ...prev, [area.id]: { ...prev[area.id], h: val } }));
+                            }}
+                            onBlur={(e) => {
+                              const inputVal = parseInt(e.target.value) || 200;
+                              const newFactory = JSON.parse(JSON.stringify(factory));
+                              const targetArea = newFactory.areas.find((a: any) => a.id === area.id);
+                              
+                              let minH = 200;
+                              targetArea.lines.forEach((l: any) => {
+                                const { reqH } = validateLineFit(targetArea, l, l.lineType || 'Straight');
+                                if (reqH + 150 > minH) minH = reqH + 150;
+                              });
+
+                              const finalVal = Math.max(minH, inputVal);
+                              targetArea.height = finalVal;
+                              targetArea.lines.forEach((l: any) => l.height = finalVal);
+                              setTempAreaSize(prev => {
+                                const next = { ...prev };
+                                delete next[area.id]?.h;
+                                return next;
+                              });
+                              updateFactory(newFactory);
+                            }}
+                            className="w-full text-xs border border-slate-200 rounded p-1.5 outline-none focus:border-indigo-500" 
+                          />
+                          <p className="text-[8px] text-slate-400 mt-1 italic">Min: {area.lines?.reduce((max: number, l: any) => Math.max(max, validateLineFit(area, l, l.lineType || 'Straight').reqH + 150), 200)}px</p>
+                        </div>
+                      </div>
+                    </div>
+
                     {area.lines?.map((line: any) =>
                       line.workCenters?.filter((wc: any) =>
                         (wc.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||

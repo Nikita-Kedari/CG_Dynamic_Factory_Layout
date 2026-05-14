@@ -44,8 +44,8 @@ export default function DeveloperPage() {
 
     const handleDownloadTemplate = () => {
         const a = document.createElement('a');
-        a.href = '/c1_layout_9_workcentres_with_details.csv';
-        a.download = 'c1_layout_9_workcentres_with_details.csv';
+        a.href = '/factory_layout_base.csv';
+        a.download = 'factory_layout_base.csv';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -116,13 +116,13 @@ export default function DeveloperPage() {
                             </div>
                             <h2 className="text-xl font-bold text-slate-900">1. Get the CSV File</h2>
                             <p className="mt-2 text-slate-500">
-                                Download the specific c1_layout_9_workcentres_with_details CSV. It includes all required columns for
+                                Download the specific factory_layout_base CSV. It includes all required columns for
                                 defining areas, lines, and machines with coordinates.
                             </p>
                         </div>
                         <Button onClick={handleDownloadTemplate} className="mt-8 w-full bg-slate-900 hover:bg-slate-800">
                             <FileText className="mr-2 h-4 w-4" />
-                            Download c1_layout_9_workcentres_with_details.csv
+                            Download factory_layout_base.csv
                         </Button>
                     </div>
 

@@ -104,6 +104,7 @@ export interface Factory {
   gridUnit: number;
   areas: Area[];
   flows?: Flow[]; // Links for visualizations
+  csvHeaders?: string[]; // Preserved original CSV structure
 }
 
 // Configuration - complete layout snapshot

@@ -200,17 +200,83 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   }, [factory]);
 
   const downloadCSV = () => {
-    let csv = "Area,Line,Workstation,WS Sequence,X,Y,Width,Height\n";
+    const headers = factory.csvHeaders || [
+      'area_name', 'area_x', 'area_y', 'area_width', 'area_length',
+      'line_name', 'line_type',
+      'ws_code', 'ws_name', 'ws_x', 'ws_y', 'ws_width', 'ws_length'
+    ];
+
+    const rows: string[] = [headers.join(',')];
+
+    // Build a map of workstation ID to its first outgoing flow for CSV export
+    const flowMap: Record<string, any> = {};
+    (factory.flows || []).forEach((f: any) => {
+      if (!flowMap[f.fromWsId]) flowMap[f.fromWsId] = f;
+    });
+
     factory.areas.forEach((area: any) => {
       area.lines.forEach((line: any) => {
         line.workCenters.forEach((wc: any) => {
-          csv += `${area.areaName},${line.lineName},${wc.name},${wc.wsSequence || 0},${Math.round(wc.x)},${Math.round(wc.y)},${Math.round(wc.width)},${Math.round(wc.height)}\n`;
+          // 1. Start with the original data from parameters to preserve all columns
+          const rowData = { ...(wc.parameters || {}) };
+          
+          // 2. Map current editor values to specific headers
+          headers.forEach(header => {
+            const h = header.toLowerCase();
+            
+            // Factory Level
+            if (h === 'factory_name') rowData[header] = factory.name;
+            if (h === 'canvas_width') rowData[header] = factory.width;
+            if (h === 'canvas_length') rowData[header] = factory.height;
+            
+            // Area Level
+            if (h === 'area_name') rowData[header] = area.areaName;
+            if (h === 'area_x') rowData[header] = Math.round(area.x);
+            if (h === 'area_y') rowData[header] = Math.round(area.y);
+            if (h === 'area_width') rowData[header] = Math.round(area.width);
+            if (h === 'area_length') rowData[header] = Math.round(area.height);
+            if (h === 'area_code') rowData[header] = area.areaId;
+            
+            // Line Level
+            if (h === 'line_name') rowData[header] = line.lineName;
+            if (h === 'line_type') rowData[header] = line.lineType || 'Straight';
+            if (h === 'line_code') rowData[header] = line.lineId;
+            
+            // Workstation Level
+            if (h === 'ws_code') rowData[header] = wc.workCenterId;
+            if (h === 'ws_name') rowData[header] = wc.machineName || wc.name;
+            if (h === 'ws_x') rowData[header] = Math.round(wc.x);
+            if (h === 'ws_y') rowData[header] = Math.round(wc.y);
+            if (h === 'ws_width') rowData[header] = Math.round(wc.width);
+            if (h === 'ws_length') rowData[header] = Math.round(wc.height);
+            if (h === 'seq') rowData[header] = wc.wsSequence || 0;
+            if (h === 'detail') rowData[header] = wc.detail || '';
+
+            // Flow Columns
+            if (h === 'from_ws') rowData[header] = flowMap[wc.id]?.fromWsId || '';
+            if (h === 'to_ws') rowData[header] = flowMap[wc.id]?.toWsId || '';
+          });
+
+          // 3. Construct CSV row based on header order
+          const values = headers.map(header => {
+            const val = rowData[header];
+            if (val === undefined || val === null) return '';
+            const valStr = val.toString();
+            // Basic CSV escape
+            if (valStr.includes(',') || valStr.includes('"') || valStr.includes('\n')) {
+              return `"${valStr.replace(/"/g, '""')}"`;
+            }
+            return valStr;
+          });
+          rows.push(values.join(','));
         });
       });
     });
-    const blob = new Blob([csv], { type: 'text/csv' });
+
+    const csvString = rows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.setAttribute('hidden', ''); a.setAttribute('href', url); a.setAttribute('download', `${factory.name}_layout.csv`);
+    const a = document.createElement('a'); a.setAttribute('hidden', ''); a.setAttribute('href', url); a.setAttribute('download', `${factory.name}.csv`);
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
@@ -551,15 +617,24 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     if (!area) return;
     
     const wsId = Math.random().toString(36).substr(2, 9);
+    
+    // Initialize parameters with all headers to ensure consistent CSV structure
+    const parameters: any = { lastUpdated: new Date() };
+    if (factory.csvHeaders) {
+      factory.csvHeaders.forEach((h: string) => parameters[h] = '');
+    }
+
     const newWc = {
       id: wsId,
       workCenterId: `W${area.lines[0].workCenters.length + 1}`,
       name: `WS ${area.lines[0].workCenters.length + 1}`,
+      machineName: `WS ${area.lines[0].workCenters.length + 1}`,
       x: area.x + 50,
       y: area.y + 100,
       width: 100,
       height: 100,
-      status: 'Running'
+      status: 'Running',
+      parameters: parameters
     };
     
     area.lines[0].workCenters.push(newWc);

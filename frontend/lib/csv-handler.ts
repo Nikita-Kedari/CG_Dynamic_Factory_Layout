@@ -137,7 +137,8 @@ export const parseCSV = (csvContent: string): Factory => {
       height: canvasH,
       gridUnit: 50,
       areas: Array.from(areasMap.values()),
-      flows: flows
+      flows: flows,
+      csvHeaders: headers
     };
   }
 
@@ -211,5 +212,6 @@ export const parseCSV = (csvContent: string): Factory => {
   }
 
   factory.areas = Array.from(areaMap.values());
+  factory.csvHeaders = headers;
   return factory;
 };

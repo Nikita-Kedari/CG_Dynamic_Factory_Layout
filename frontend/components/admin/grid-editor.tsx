@@ -8,6 +8,7 @@ import { parseCSV } from '@/lib/csv-handler';
 
 interface GridEditorProps {
   onSave?: (factory: any) => void;
+  onLayoutIdChange?: (id: string, name: string) => void;
   initialFactory?: any;
   isAdmin?: boolean;
   readOnly?: boolean;
@@ -795,6 +796,11 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
               // Visualize immediately
               updateFactory(result.factory);
               
+              // Notify parent of new ID and Name
+              if (onLayoutIdChange) {
+                onLayoutIdChange(result.id, result.name || file.name.replace('.csv', ''));
+              }
+              
               // If we have a router, we could update the URL, but local update is what they asked for
               setSavedMsg(true);
               setTimeout(() => setSavedMsg(false), 3000);
@@ -855,9 +861,8 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
                     <div className="space-y-2"><label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Width</label><input type="text" value={localInputs.width || ''} onChange={e => updateSelectedItem('width', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 transition-all" /></div>
                     <div className="space-y-2"><label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Height</label><input type="text" value={localInputs.height || ''} onChange={e => updateSelectedItem('height', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 transition-all" /></div>
                   </div>
-                  <div className="pt-4 flex gap-3">
-                    <Button onClick={() => { if (selectedWcId) deleteWc(selectedWcId); else if (selectedAreaId) deleteArea(selectedAreaId); }} variant="outline" className="flex-1 rounded-2xl border-rose-200 text-rose-600 font-black uppercase text-[10px] tracking-widest h-12 hover:bg-rose-50 hover:border-rose-300 shadow-sm transition-all"><Trash2 className="h-4 w-4 mr-2" /> Delete</Button>
-                    <Button onClick={() => { setSelectedWcId(null); setSelectedAreaId(null); }} className="flex-[2] rounded-2xl bg-white text-slate-900 border border-slate-200 font-black uppercase text-[10px] tracking-widest h-12 hover:bg-slate-50 shadow-sm transition-all active:scale-[0.98]">Done Editing</Button>
+                  <div className="pt-4 flex">
+                    <Button onClick={() => { setSelectedWcId(null); setSelectedAreaId(null); }} className="w-full rounded-2xl bg-white text-slate-900 border border-slate-200 font-black uppercase text-[10px] tracking-widest h-12 hover:bg-slate-50 shadow-sm transition-all active:scale-[0.98]">Done Editing</Button>
                   </div>
                 </div>
               </div>
@@ -873,7 +878,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
                     <div onClick={() => { setSelectedAreaId(area.id); setSelectedWcId(null); }} className={`p-4 rounded-2xl border cursor-pointer transition-all flex justify-between items-center group ${selectedAreaId === area.id ? 'bg-white border-slate-900 shadow-lg ring-1 ring-slate-100' : 'bg-white border-slate-100 hover:border-slate-200 shadow-sm'}`}><div className="flex items-center gap-3"><input type="checkbox" checked={selectedAreaId === area.id} readOnly className="h-4 w-4 accent-slate-900 rounded border-slate-300" /><span className={`text-xs font-black uppercase tracking-wide transition-colors ${selectedAreaId === area.id ? 'text-slate-900' : 'text-slate-500 group-hover:text-slate-900'}`}>{area.areaName}</span></div><ChevronRight className={`h-4 w-4 transition-all ${selectedAreaId === area.id ? 'text-slate-900 translate-x-1' : 'text-slate-300'}`} /></div>
                     {selectedAreaId === area.id && (
                       <div className="px-2 pb-2 pt-1 animate-in slide-in-from-top-2 duration-200">
-                        <Button onClick={() => addWorkstation(area.id)} variant="outline" className="w-full rounded-xl border-dashed border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-400 h-9 text-[10px] font-bold uppercase tracking-widest bg-slate-50/50"><Plus className="h-3 w-3 mr-2" /> Add Workstation</Button>
+                        <div className="w-full h-1 bg-slate-50/50 rounded-full" />
                       </div>
                     )}
                   </div>

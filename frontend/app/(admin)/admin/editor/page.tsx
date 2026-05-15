@@ -140,18 +140,34 @@ export default function EditorPage() {
 
   const handleSaveFactory = async (factory: any) => {
     console.log('Factory triggered save:', factory);
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || '/api';
-    if (layoutId) {
-      try {
-        await fetch(`${baseUrl}/layouts/${layoutId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ factory })
-        });
-        console.log('Successfully saved to active layout record.');
-      } catch (err) {
-        console.error('Failed remotely saving layout:', err);
-      }
+    
+    if (!layoutId) {
+      console.warn('No layoutId found, saving to local storage fallback');
+      localStorage.setItem('lastFactorySave', JSON.stringify(factory));
+      return;
+    }
+
+    try {
+      // Determine if it's a local or backend layout based on ID format or previous load state
+      // Local IDs are usually UUIDs, backend IDs are usually numeric strings
+      const isLocal = isNaN(Number(layoutId));
+      const baseUrl = isLocal ? '/api' : 'http://localhost:4000/api';
+
+      const response = await fetch(`${baseUrl}/layouts/${layoutId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ factory })
+      });
+
+      if (!response.ok) throw new Error('Failed to save layout');
+      
+      const result = await response.json();
+      console.log('Successfully saved layout:', result);
+      setSavedMsg(true);
+      setTimeout(() => setSavedMsg(false), 3000);
+    } catch (err) {
+      console.error('Failed saving layout:', err);
+      alert('Failed to save layout. Please check console for details.');
     }
   };
 
@@ -203,7 +219,19 @@ export default function EditorPage() {
         {/* Main Content */}
         <div className="flex flex-1 overflow-hidden">
           {isClient && !loading ? (
-            <GridEditor onSave={handleSaveFactory} initialFactory={layoutData} isAdmin={getCurrentUser()?.role === 'admin'} layoutId={layoutId} />
+            <GridEditor 
+              onSave={handleSaveFactory} 
+              initialFactory={layoutData} 
+              isAdmin={getCurrentUser()?.role === 'admin'} 
+              layoutId={layoutId} 
+              onLayoutIdChange={(id, name) => {
+                setLayoutId(id);
+                setLayoutName(name);
+                // Update URL without refreshing
+                const newUrl = `${window.location.pathname}?id=${id}`;
+                window.history.pushState({ path: newUrl }, '', newUrl);
+              }}
+            />
           ) : (
             <div className="flex flex-1 items-center justify-center text-slate-400 bg-[#0f172a]">
               Loading layout...

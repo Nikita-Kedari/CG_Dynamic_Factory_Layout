@@ -275,6 +275,83 @@ router.patch('/:versionId/sync-areas', async (req, res) => {
 });
 
 // ──────────────────────────────────────────────
+// PUT /api/layouts/:versionId
+// Save full layout state from the visual editor
+// Body: { factory: { ... } }
+// ──────────────────────────────────────────────
+router.put('/:id', async (req, res) => {
+  const { factory } = req.body;
+  const versionId = parseInt(req.params.id);
+
+  if (!factory) return res.status(400).json({ error: 'Factory data required' });
+
+  try {
+    const pool = await getPool();
+    const transaction = new sql.Transaction(pool);
+    await transaction.begin();
+
+    try {
+      // 1. Get version and layout info
+      const vRes = await transaction.request()
+        .input('vid', sql.Int, versionId)
+        .query('SELECT layout_id FROM LAYOUT_VERSIONS WHERE layout_version_id = @vid');
+      
+      if (!vRes.recordset.length) throw new Error('Layout version not found');
+      const layoutId = vRes.recordset[0].layout_id;
+
+      // 2. Update Canvas/Layout dimensions
+      await transaction.request()
+        .input('lid', sql.Int, layoutId)
+        .input('w',   sql.Float, factory.width || 1200)
+        .input('l',   sql.Float, factory.height || 800)
+        .query('UPDATE LAYOUTS SET canvas_width = @w, canvas_length = @l WHERE layout_id = @lid');
+
+      // 3. Update Areas
+      for (const area of factory.areas) {
+        await transaction.request()
+          .input('aid', sql.Int, parseInt(area.id))
+          .input('x',   sql.Float, area.x)
+          .input('y',   sql.Float, area.y)
+          .input('w',   sql.Float, area.width)
+          .input('l',   sql.Float, area.height)
+          .query('UPDATE AREAS SET pos_x = @x, pos_y = @y, width = @w, length = @l WHERE area_id = @aid');
+
+        // 4. Update Lines and Workstations
+        for (const line of area.lines) {
+          await transaction.request()
+            .input('lid',  sql.Int,      parseInt(line.id))
+            .input('type', sql.VarChar,  line.lineType || 'Straight')
+            .query('UPDATE PRODUCTION_LINES SET line_type = @type WHERE line_id = @lid');
+
+          for (const wc of line.workCenters) {
+            await transaction.request()
+              .input('wid', sql.Int,      parseInt(wc.id))
+              .input('x',   sql.Float,    wc.x)
+              .input('y',   sql.Float,    wc.y)
+              .input('w',   sql.Float,    wc.width)
+              .input('l',   sql.Float,    wc.height)
+              .input('det', sql.NVarChar, wc.detail || '')
+              .query('UPDATE WORKSTATIONS SET pos_x = @x, pos_y = @y, width = @w, length = @l, detail = @det WHERE ws_id = @wid');
+          }
+        }
+      }
+
+      // 5. Update Flows (Optional: would require clearing and re-inserting)
+      // For now, we update positions and line types which covers most visual edits.
+
+      await transaction.commit();
+      res.json({ success: true, message: 'Layout persisted to database' });
+    } catch (err) {
+      await transaction.rollback();
+      throw err;
+    }
+  } catch (err) {
+    console.error('Save error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────
 // POST /api/layouts/:draftId/commit
 // Save a named version (developer "Save Version")
 // Body: { version_name, change_notes }

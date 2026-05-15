@@ -275,28 +275,34 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       const aw = area.width * zoom; const ah = area.height * zoom;
       const isSelectedArea = area.id === selectedAreaId;
       
-      // --- COLLISION RESOLUTION ---
-      // Dynamically push workstations apart to prevent overlaps
+      // --- ROBUST COLLISION RESOLUTION (Zero-Overlap Plotting) ---
       const resolvedWcs: any[] = [];
       area.lines?.forEach((line: any) => {
         line.workCenters?.forEach((wc: any) => {
           let nx = wc.x; let ny = wc.y;
-          const pad = 20; // Padding between machines
-
-          resolvedWcs.forEach((other: any) => {
-            const overlapX = (nx < other.x + other.width + pad) && (nx + wc.width + pad > other.x);
-            const overlapY = (ny < other.y + other.height + pad) && (ny + wc.height + pad > other.y);
-            
-            if (overlapX && overlapY) {
-              // Resolve overlap by shifting right (horizontal priority)
-              nx = other.x + other.width + pad;
-              // If shifting right pushes it out of area, try shifting down
-              if (nx + wc.width > area.x + area.width - 20) {
-                nx = wc.x; // reset x
-                ny = other.y + other.height + pad;
+          const pad = 30; // Clean architectural padding
+          
+          // Iterative resolution to handle complex clusters (max 10 passes)
+          for (let pass = 0; pass < 10; pass++) {
+            let collided = false;
+            for (const other of resolvedWcs) {
+              const ox = (nx < other.x + other.width + pad) && (nx + wc.width + pad > other.x);
+              const oy = (ny < other.y + other.height + pad) && (ny + wc.height + pad > other.y);
+              
+              if (ox && oy) {
+                collided = true;
+                // Smart Shift Strategy
+                if (nx + wc.width + pad < area.x + area.width) {
+                  nx = other.x + other.width + pad; // Shift Right
+                } else if (ny + wc.height + pad < area.y + area.height) {
+                  ny = other.y + other.height + pad; // Shift Down
+                } else {
+                  nx = other.x - wc.width - pad; // Shift Left
+                }
               }
             }
-          });
+            if (!collided) break;
+          }
           resolvedWcs.push({ ...wc, x: nx, y: ny });
         });
       });
@@ -572,7 +578,41 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 flex items-center gap-3 z-30">
         <Button onClick={() => window.location.href = '/developer'} variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white"><ArrowLeft className="h-4 w-4 mr-2" /> Back to Overview</Button>
         <div className="h-6 w-px bg-slate-200 mx-2"></div>
-        <Button variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white"><Upload className="h-4 w-4 mr-2" /> Upload CSV</Button>
+        <input 
+          type="file" 
+          id="csv-upload" 
+          className="hidden" 
+          accept=".csv" 
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('name', file.name.replace('.csv', ''));
+
+            try {
+              const response = await fetch('/api/layouts', {
+                method: 'POST',
+                body: formData,
+              });
+
+              if (!response.ok) throw new Error('Upload failed');
+              const result = await response.json();
+              
+              // Visualize immediately
+              updateFactory(result.factory);
+              
+              // If we have a router, we could update the URL, but local update is what they asked for
+              setSavedMsg(true);
+              setTimeout(() => setSavedMsg(false), 3000);
+            } catch (err) {
+              console.error('Failed to upload layout', err);
+              alert('Failed to upload layout. Please check the file format.');
+            }
+          }} 
+        />
+        <Button onClick={() => document.getElementById('csv-upload')?.click()} variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white"><Upload className="h-4 w-4 mr-2" /> Upload CSV</Button>
         <Button onClick={downloadCSV} variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white"><Download className="h-4 w-4 mr-2" /> Download CSV</Button>
         <div className="flex-1" />
         <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">

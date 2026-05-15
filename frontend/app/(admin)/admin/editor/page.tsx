@@ -163,8 +163,6 @@ export default function EditorPage() {
       
       const result = await response.json();
       console.log('Successfully saved layout:', result);
-      setSavedMsg(true);
-      setTimeout(() => setSavedMsg(false), 3000);
     } catch (err) {
       console.error('Failed saving layout:', err);
       alert('Failed to save layout. Please check console for details.');

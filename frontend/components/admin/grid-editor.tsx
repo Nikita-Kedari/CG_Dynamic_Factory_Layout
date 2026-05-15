@@ -273,33 +273,64 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     factory.areas.forEach((area: any) => {
       const ax = area.x * zoom + panX; const ay = area.y * zoom + panY;
       const aw = area.width * zoom; const ah = area.height * zoom;
-      const isSelected = area.id === selectedAreaId;
-      ctx.fillStyle = isSelected ? 'rgba(148, 163, 184, 0.08)' : 'rgba(30, 41, 59, 0.4)';
-      roundRect(ctx, ax, ay, aw, ah, 12 * zoom); ctx.fill();
-      ctx.strokeStyle = isSelected ? '#94a3b8' : '#334155'; ctx.lineWidth = (isSelected ? 2 : 1.5) * zoom; 
-      roundRect(ctx, ax, ay, aw, ah, 12 * zoom); ctx.stroke();
-      ctx.fillStyle = isSelected ? '#f1f5f9' : '#64748b'; ctx.font = `bold ${Math.max(10, 16 * zoom)}px Inter`;
-      ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(area.areaName.toUpperCase(), ax + 20 * zoom, ay + 20 * zoom);
-    });
-
-    factory.areas.forEach((area: any) => {
+      const isSelectedArea = area.id === selectedAreaId;
+      
+      // --- COLLISION RESOLUTION ---
+      // Dynamically push workstations apart to prevent overlaps
+      const resolvedWcs: any[] = [];
       area.lines?.forEach((line: any) => {
         line.workCenters?.forEach((wc: any) => {
-          const wx = wc.x * zoom + panX; const wy = wc.y * zoom + panY;
-          const ww = wc.width * zoom; const wh = wc.height * zoom;
+          let nx = wc.x; let ny = wc.y;
+          const pad = 20; // Padding between machines
+
+          resolvedWcs.forEach((other: any) => {
+            const overlapX = (nx < other.x + other.width + pad) && (nx + wc.width + pad > other.x);
+            const overlapY = (ny < other.y + other.height + pad) && (ny + wc.height + pad > other.y);
+            
+            if (overlapX && overlapY) {
+              // Resolve overlap by shifting right (horizontal priority)
+              nx = other.x + other.width + pad;
+              // If shifting right pushes it out of area, try shifting down
+              if (nx + wc.width > area.x + area.width - 20) {
+                nx = wc.x; // reset x
+                ny = other.y + other.height + pad;
+              }
+            }
+          });
+          resolvedWcs.push({ ...wc, x: nx, y: ny });
+        });
+      });
+
+      // Draw Area
+      ctx.fillStyle = isSelectedArea ? 'rgba(148, 163, 184, 0.08)' : 'rgba(30, 41, 59, 0.4)';
+      roundRect(ctx, ax, ay, aw, ah, 12 * zoom); ctx.fill();
+      ctx.strokeStyle = isSelectedArea ? '#94a3b8' : '#334155'; ctx.lineWidth = (isSelectedArea ? 2 : 1.5) * zoom; 
+      roundRect(ctx, ax, ay, aw, ah, 12 * zoom); ctx.stroke();
+      ctx.fillStyle = isSelectedArea ? '#f1f5f9' : '#64748b'; ctx.font = `bold ${Math.max(10, 16 * zoom)}px Inter`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(area.areaName.toUpperCase(), ax + 20 * zoom, ay + 20 * zoom);
+
+      // Draw Resolved Workstations
+      resolvedWcs.forEach((wc: any) => {
           const isSelected = wc.id === selectedWcId;
           const _id = (wc.id || '').toLowerCase();
-          // Smart ID Matching: Try direct ID, then try with 'w' prefix for SQL compatibility
-          const excelData = dynamicWorkstationData[_id] || 
-                            dynamicWorkstationData['w' + _id] || 
-                            wc.parameters || 
-                            EXCEL_WORKSTATIONS['w' + _id.replace(/^w/, '')];
+          const excelData = dynamicWorkstationData[_id] || dynamicWorkstationData['w' + _id] || wc.parameters || EXCEL_WORKSTATIONS['w' + _id.replace(/^w/, '')];
           
           const status = (excelData?.status || 'Running').toLowerCase();
           let color = '#10b981'; if (status === 'idle') color = '#f59e0b'; else if (status === 'down' || status === 'critical') color = '#ef4444';
+
+          const ww = wc.width * zoom; const wh = wc.height * zoom;
+
+          // --- BOUNDARY CLAMP ---
+          const minX = ax + 10 * zoom; const maxX = ax + aw - ww - 10 * zoom;
+          const minY = ay + 10 * zoom; const maxY = ay + ah - wh - 10 * zoom;
+          const wx = Math.max(minX, Math.min(maxX, wc.x * zoom + panX));
+          const wy = Math.max(minY, Math.min(maxY, wc.y * zoom + panY));
+          // ---------------------
+
           ctx.fillStyle = isSelected ? 'rgba(56, 189, 248, 0.1)' : 'rgba(15, 23, 42, 0.98)';
           ctx.strokeStyle = isSelected ? '#38bdf8' : color; ctx.lineWidth = (isSelected ? 4 : 3) * zoom;
           roundRect(ctx, wx, wy, ww, wh, 8 * zoom); ctx.fill(); ctx.stroke();
+
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           if (activeFilterIds['ws_id']) { 
             ctx.fillStyle = '#ffffff'; 
@@ -312,24 +343,17 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
             if (activeFilterIds[param.id]) {
               const val = excelData?.[param.id];
               if (val !== undefined && val !== null) {
-                // Different colors for different rows to keep it readable
                 const colors = ['#10b981', '#38bdf8', '#fbbf24', '#f87171', '#a78bfa'];
                 ctx.fillStyle = colors[pIdx % colors.length];
                 ctx.font = `${pIdx === 0 ? 'bold' : '600'} ${Math.max(7, (pIdx === 0 ? 14 : 12) * zoom)}px Inter`;
-                
-                let displayVal = val;
-                if (param.id === 'oee') displayVal = `${val}% OEE`;
-                else if (param.id === 'orders') displayVal = `Orders: ${val}`;
-                else displayVal = `${param.label}: ${val}`;
-
-                ctx.fillText(displayVal.toString(), wx + ww / 2, wy + wh / 2 + yOff * zoom);
+                let dVal = param.id === 'oee' ? `${val}% OEE` : (param.id === 'orders' ? `Orders: ${val}` : `${param.label}: ${val}`);
+                ctx.fillText(dVal.toString(), wx + ww / 2, wy + wh / 2 + yOff * zoom);
                 yOff += 20;
               }
             }
           });
         });
       });
-    });
 
     // ── 3. Dynamic Flows (CSV Driven) ───────────────────────────
     const allWcs: Record<string, any> = {};
@@ -337,34 +361,58 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       allWcs[w.id] = { ...w, area: a };
     })));
 
-    (factory.flows || []).forEach((flow: any) => {
+    (factory.flows || []).forEach((flow: any, fIdx: number) => {
       const from = allWcs[flow.fromWsId];
       const to = allWcs[flow.toWsId];
       if (!from || !to) return;
 
-      const fx = (from.x + from.width) * zoom + panX;
-      const fy = (from.y + from.height / 2) * zoom + panY;
-      const tx = (to.x + to.width / 2) * zoom + panX;
-      const ty = to.y * zoom + panY;
-
-      const path: { x: number; y: number }[] = [{ x: fx, y: fy }];
-      
-      // Dynamic Flow Coloring
       const isInternal = from.area.id === to.area.id;
-      const flowColor = isInternal ? '#fbbf24' : '#ef4444'; // Yellow for Internal, Red for Outer
-
-      // Advanced Orthogonal Routing
-      if (Math.abs(fy - ty) > 50 * zoom || Math.abs(fx - tx) > 150 * zoom) {
-        // Multi-segment path for cleaner visual routing
-        const midX = fx + 40 * zoom;
-        const midY = (fy + ty) / 2;
-        path.push({ x: midX, y: fy });
-        path.push({ x: midX, y: midY });
-        path.push({ x: tx, y: midY });
+      const flowColor = isInternal ? '#fbbf24' : '#ef4444';
+      
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      
+      let fx, fy, tx, ty;
+      // Define Entry/Exit side
+      if (Math.abs(dx) > Math.abs(dy)) {
+        fx = (dx > 0 ? (from.x + from.width) : from.x) * zoom + panX;
+        fy = (from.y + from.height / 2) * zoom + panY;
+        tx = (dx > 0 ? to.x : (to.x + to.width)) * zoom + panX;
+        ty = (to.y + to.height / 2) * zoom + panY;
+      } else {
+        fx = (from.x + from.width / 2) * zoom + panX;
+        fy = (dy > 0 ? (from.y + from.height) : from.y) * zoom + panY;
+        tx = (to.x + to.width / 2) * zoom + panX;
+        ty = (dy > 0 ? to.y : (to.y + to.height)) * zoom + panY;
       }
-      path.push({ x: tx, y: ty });
 
-      drawPathWithArrow(path, flowColor, true, { w: to.width * zoom, h: 0 });
+      let path: { x: number; y: number }[] = [{ x: fx, y: fy }];
+      const laneSpace = (fIdx % 6 + 1) * 20 * zoom;
+
+      // PRIORITY ROUTING based on distance and alignment
+      if (isInternal || dist < 500) {
+        // --- Short Distance: Straight or L-Shape ---
+        if (Math.abs(fy - ty) < 20 || Math.abs(fx - tx) < 20) {
+          path.push({ x: tx, y: ty }); // Straight
+        } else {
+          // L-Shape (Direct)
+          path.push({ x: tx, y: fy });
+          path.push({ x: tx, y: ty });
+        }
+      } else {
+        // --- Long Distance: U-Shape or Inverted U-Shape (Corridor) ---
+        const useTop = dy < 0; 
+        const perimeterY = useTop 
+          ? (from.area.y - 40) * zoom + panY - laneSpace 
+          : (from.area.y + from.area.height + 40) * zoom + panY + laneSpace;
+        
+        path.push({ x: fx, y: perimeterY });
+        path.push({ x: tx, y: perimeterY });
+        path.push({ x: tx, y: ty });
+      }
+
+      drawPathWithArrow(path, flowColor, true, { w: to.width * zoom, h: to.height * zoom });
     });
   }, [factory, viewState, showGrid, activeFilterIds, dynamicWorkstationData, selectedAreaId, selectedWcId, isAdmin, isPublicView]);
 

@@ -301,7 +301,11 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
           ctx.strokeStyle = isSelected ? '#38bdf8' : color; ctx.lineWidth = (isSelected ? 4 : 3) * zoom;
           roundRect(ctx, wx, wy, ww, wh, 8 * zoom); ctx.fill(); ctx.stroke();
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          if (activeFilterIds['ws_id']) { ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.max(12, 36 * zoom)}px Inter`; ctx.fillText(wc.name || '', wx + ww / 2, wy + wh / 2); }
+          if (activeFilterIds['ws_id']) { 
+            ctx.fillStyle = '#ffffff'; 
+            ctx.font = `bold ${Math.max(14, 38 * zoom)}px Inter`; 
+            ctx.fillText(wc.workCenterId || wc.name || '', wx + ww / 2, wy + wh / 2); 
+          }
           
           let yOff = 35;
           availableParameters.forEach((param, pIdx) => {
@@ -327,43 +331,41 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       });
     });
 
-    const areaEnds: any[] = [];
-    factory.areas.forEach((area: any) => {
-      const areaWCs: any[] = [];
-      area.lines?.forEach((line: any) => {
-        line.workCenters?.forEach((wc: any, idx: number) => {
-          areaWCs.push(wc);
-          if (idx < line.workCenters.length - 1) {
-            const nextWc = line.workCenters[idx + 1];
-            const fx = (wc.x + wc.width / 2) * zoom + panX; const fy = (wc.y + wc.height / 2) * zoom + panY;
-            const tx = (nextWc.x + nextWc.width / 2) * zoom + panX; const ty = (nextWc.y + nextWc.height / 2) * zoom + panY;
-            drawPathWithArrow([{x: fx, y: fy}, {x: tx, y: ty}], '#f59e0b', true, {w: nextWc.width * zoom, h: nextWc.height * zoom});
-          }
-        });
-      });
-      if (areaWCs.length > 0) { areaWCs.sort((a, b) => (a.wsSequence || 0) - (b.wsSequence || 0)); areaEnds.push({ area, first: areaWCs[0], last: areaWCs[areaWCs.length - 1] }); }
-    });
+    // ── 3. Dynamic Flows (CSV Driven) ───────────────────────────
+    const allWcs: Record<string, any> = {};
+    factory.areas.forEach((a: any) => a.lines.forEach((l: any) => l.workCenters.forEach((w: any) => {
+      allWcs[w.id] = { ...w, area: a };
+    })));
 
-    for (let i = 0; i < areaEnds.length - 1; i++) {
-      const fromObj = areaEnds[i]; const toObj = areaEnds[i + 1];
-      const from = fromObj.last; const to = toObj.first;
-      if (!from || !to) continue;
+    (factory.flows || []).forEach((flow: any) => {
+      const from = allWcs[flow.fromWsId];
+      const to = allWcs[flow.toWsId];
+      if (!from || !to) return;
+
+      const fx = (from.x + from.width) * zoom + panX;
+      const fy = (from.y + from.height / 2) * zoom + panY;
+      const tx = (to.x + to.width / 2) * zoom + panX;
+      const ty = to.y * zoom + panY;
+
+      const path: { x: number; y: number }[] = [{ x: fx, y: fy }];
       
-      const fx = (from.x + from.width) * zoom + panX; const fy = (from.y + from.height / 2) * zoom + panY;
-      const tx = (to.x + to.width / 2) * zoom + panX; const ty = to.y * zoom + panY;
-      const path: {x: number, y: number}[] = [{x: fx, y: fy}];
-      
-      const isNewRow = to.y > fromObj.area.y + fromObj.area.height + 50;
-      if (isNewRow) {
-        const midY = (fromObj.area.y + fromObj.area.height + toObj.area.y) / 2 * zoom + panY;
-        path.push({x: fx + 40 * zoom, y: fy}); path.push({x: fx + 40 * zoom, y: midY}); path.push({x: tx, y: midY});
-      } else {
-        const midX = fx + 40 * zoom; const midY = ty - 40 * zoom;
-        path.push({x: midX, y: fy}); path.push({x: midX, y: midY}); path.push({x: tx, y: midY});
+      // Dynamic Flow Coloring
+      const isInternal = from.area.id === to.area.id;
+      const flowColor = isInternal ? '#fbbf24' : '#ef4444'; // Yellow for Internal, Red for Outer
+
+      // Advanced Orthogonal Routing
+      if (Math.abs(fy - ty) > 50 * zoom || Math.abs(fx - tx) > 150 * zoom) {
+        // Multi-segment path for cleaner visual routing
+        const midX = fx + 40 * zoom;
+        const midY = (fy + ty) / 2;
+        path.push({ x: midX, y: fy });
+        path.push({ x: midX, y: midY });
+        path.push({ x: tx, y: midY });
       }
-      path.push({x: tx, y: ty});
-      drawPathWithArrow(path, '#ef4444', true, {w: to.width * zoom, h: 0});
-    }
+      path.push({ x: tx, y: ty });
+
+      drawPathWithArrow(path, flowColor, true, { w: to.width * zoom, h: 0 });
+    });
   }, [factory, viewState, showGrid, activeFilterIds, dynamicWorkstationData, selectedAreaId, selectedWcId, isAdmin, isPublicView]);
 
   const selectedArea = factory.areas.find((a: any) => a.id === (selectedAreaId || ''));

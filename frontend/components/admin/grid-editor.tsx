@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ZoomIn, ZoomOut, Maximize2, Grid3x3, RotateCcw, Save, ArrowLeft, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity, AlertCircle, CheckSquare, CheckCircle2, XCircle, Send, Search, Checkbox } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Grid3x3, Undo2, Redo2, RotateCcw, Save, ArrowLeft, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity, AlertCircle, CheckSquare, CheckCircle2, XCircle, Send, Search, Checkbox, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { threeAssembliesFactory } from '@/lib/three-assemblies';
 import { parseCSV } from '@/lib/csv-handler';
@@ -64,6 +64,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
 
   const [factory, setFactory] = useState(initialFactory || threeAssembliesFactory);
   const [history, setHistory] = useState<any[]>([]);
+  const [redoStack, setRedoStack] = useState<any[]>([]);
   const [viewState, setViewState] = useState({ zoom: 0.35, panX: 60, panY: 60, time: 0, targetZoom: 0.35, targetPanX: 60, targetPanY: 60 });
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [selectedWcId, setSelectedWcId] = useState<string | null>(null);
@@ -79,6 +80,8 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   const [shareMsg, setShareMsg] = useState(false);
   const [localInputs, setLocalInputs] = useState<Record<string, string>>({});
   const [isPublicView, setIsPublicView] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const editStartRef = useRef<any>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -146,9 +149,47 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
 
   const updateFactory = (newFactory: any, recordHistory = true) => {
     const clamped = clampFactory({ ...newFactory });
-    if (recordHistory) setHistory(prev => [...prev, factory]);
+    if (recordHistory) {
+      setHistory(prev => [...prev.slice(-49), JSON.parse(JSON.stringify(factory))]);
+      setRedoStack([]);
+    }
     setFactory(clamped);
   };
+
+  const undo = useCallback(() => {
+    if (history.length === 0) return;
+    const previous = JSON.parse(JSON.stringify(history[history.length - 1]));
+    setRedoStack(prev => [...prev, JSON.parse(JSON.stringify(factory))]);
+    setHistory(prev => prev.slice(0, -1));
+    setFactory(previous);
+    setSelectedWcId(null);
+    setSelectedAreaId(null);
+  }, [history, factory]);
+
+  const redo = useCallback(() => {
+    if (redoStack.length === 0) return;
+    const next = JSON.parse(JSON.stringify(redoStack[redoStack.length - 1]));
+    setHistory(prev => [...prev, JSON.parse(JSON.stringify(factory))]);
+    setRedoStack(prev => prev.slice(0, -1));
+    setFactory(next);
+    setSelectedWcId(null);
+    setSelectedAreaId(null);
+  }, [redoStack, factory]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
 
   const handleFitToScreen = useCallback(() => {
     const canvas = canvasRef.current; if (!canvas || !factory) return;
@@ -443,17 +484,21 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     const rect = canvasRef.current?.getBoundingClientRect(); if (!rect) return;
     const mouseX = (e.clientX - rect.left - viewState.panX) / viewState.zoom;
     const mouseY = (e.clientY - rect.top - viewState.panY) / viewState.zoom;
+    
+    // Capture state for history before potential drag
+    const initialState = JSON.parse(JSON.stringify(factory));
+
     for (const area of factory.areas) {
       for (const line of area.lines || []) {
         for (const wc of line.workCenters || []) {
           if (mouseX >= wc.x && mouseX <= wc.x + wc.width && mouseY >= wc.y && mouseY <= wc.y + wc.height) {
-            dragRef.current = { type: 'wc', id: wc.id, areaId: area.id, startX: e.clientX, startY: e.clientY, itemStartX: wc.x, itemStartY: wc.y };
+            dragRef.current = { type: 'wc', id: wc.id, areaId: area.id, startX: e.clientX, startY: e.clientY, itemStartX: wc.x, itemStartY: wc.y, initialState } as any;
             setSelectedWcId(wc.id); setSelectedAreaId(area.id); return;
           }
         }
       }
     }
-    dragRef.current = { type: 'pan', id: '', startX: e.clientX, startY: e.clientY, itemStartX: viewState.panX, itemStartY: viewState.panY };
+    dragRef.current = { type: 'pan', id: '', startX: e.clientX, startY: e.clientY, itemStartX: viewState.panX, itemStartY: viewState.panY } as any;
     setSelectedWcId(null);
   };
 
@@ -477,7 +522,62 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     }
   };
 
-  const handleMouseUp = () => { if (dragRef.current && dragRef.current.type !== 'pan') { setHistory(prev => [...prev, factory]); syncLocalInputs(); } dragRef.current = null; };
+  const handleMouseUp = (e: React.MouseEvent) => { 
+    if (dragRef.current && (dragRef.current as any).type !== 'pan') { 
+      const stateToRecord = (dragRef.current as any).initialState;
+      const startX = dragRef.current.startX;
+      const startY = dragRef.current.startY;
+
+      // Only record history if something actually moved
+      if (Math.abs(e.clientX - startX) > 2 || Math.abs(e.clientY - startY) > 2) {
+        setHistory(prev => [...prev.slice(-49), stateToRecord]);
+        setRedoStack([]);
+      }
+      syncLocalInputs(); 
+    } 
+    dragRef.current = null; 
+  };
+
+
+
+  const deleteArea = (id: string) => {
+    updateFactory({ ...factory, areas: factory.areas.filter((a: any) => a.id !== id) });
+    if (selectedAreaId === id) setSelectedAreaId(null);
+  };
+
+  const addWorkstation = (areaId: string) => {
+    const newFactory = JSON.parse(JSON.stringify(factory));
+    const area = newFactory.areas.find((a: any) => a.id === areaId);
+    if (!area) return;
+    
+    const wsId = Math.random().toString(36).substr(2, 9);
+    const newWc = {
+      id: wsId,
+      workCenterId: `W${area.lines[0].workCenters.length + 1}`,
+      name: `WS ${area.lines[0].workCenters.length + 1}`,
+      x: area.x + 50,
+      y: area.y + 100,
+      width: 100,
+      height: 100,
+      status: 'Running'
+    };
+    
+    area.lines[0].workCenters.push(newWc);
+    updateFactory(newFactory);
+    setSelectedWcId(wsId);
+  };
+
+  const deleteWc = (id: string) => {
+    const newFactory = JSON.parse(JSON.stringify(factory));
+    newFactory.areas.forEach((a: any) => {
+      a.lines.forEach((l: any) => {
+        l.workCenters = l.workCenters.filter((w: any) => w.id !== id);
+      });
+    });
+    newFactory.flows = (newFactory.flows || []).filter((f: any) => f.fromWsId !== id && f.toWsId !== id);
+    updateFactory(newFactory);
+    if (selectedWcId === id) setSelectedWcId(null);
+  };
 
   const autoLayoutArea = (area: any, type: string) => {
     const wcs = area.lines[0].workCenters; const startX = area.x + 80; const startY = area.y + 100; const step = 140;
@@ -494,7 +594,24 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     const newFactory = { ...factory };
     if (selectedWcId) { newFactory.areas.forEach((a: any) => a.lines.forEach((l: any) => l.workCenters.forEach((wc: any) => { if (wc.id === selectedWcId) { if (key === 'x') wc.x = Math.max(a.x, Math.min(a.x + a.width - wc.width, val)); else if (key === 'y') wc.y = Math.max(a.y, Math.min(a.y + a.height - wc.height, val)); else if (key === 'width') wc.width = Math.max(40, Math.min(val, a.x + a.width - wc.x)); else if (key === 'height') wc.height = Math.max(40, Math.min(val, a.y + a.height - wc.y)); else if (key === 'ws_id') wc.ws_id = rawVal; else wc[key] = val; } }))); }
     else if (selectedAreaId) { const area = newFactory.areas.find((a: any) => a.id === selectedAreaId); if (area) { if (key === 'width' || key === 'height') { let minW = 200, minH = 200; area.lines.forEach((l: any) => l.workCenters.forEach((wc: any) => { minW = Math.max(minW, wc.x + wc.width - area.x + 20); minH = Math.max(minH, wc.y + wc.height - area.y + 20); })); if (key === 'width') area.width = Math.max(minW, val); if (key === 'height') area.height = Math.max(minH, val); } else if (key === 'x' || key === 'y') { const diff = val - (key === 'x' ? area.x : area.y); area[key] = val; area.lines.forEach((l: any) => l.workCenters.forEach((wc: any) => { if (key === 'x') wc.x += diff; else wc.y += diff; })); } else if (key === 'lineType') { area.lineType = rawVal; autoLayoutArea(area, rawVal); } else area[key] = val; } }
-    updateFactory(newFactory);
+    updateFactory(newFactory, false); // Don't record on every keystroke
+  };
+
+  const handleInputFocus = () => {
+    editStartRef.current = JSON.parse(JSON.stringify(factory));
+  };
+
+  const handleInputBlur = () => {
+    if (editStartRef.current) {
+      const currentStr = JSON.stringify(factory);
+      const startStr = JSON.stringify(editStartRef.current);
+      if (currentStr !== startStr) {
+        setHistory(prev => [...prev.slice(-49), editStartRef.current]);
+        setRedoStack([]);
+      }
+    }
+    editStartRef.current = null;
+    syncLocalInputs();
   };
 
   const handleReviewAction = async (action: 'approve' | 'reject' | 'push') => {
@@ -619,7 +736,10 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
           <Button onClick={() => setViewState(p => ({ ...p, targetZoom: Math.max(0.35, p.targetZoom / 1.2) }))} variant="ghost" size="icon" className="h-9 w-9 text-slate-500"><ZoomOut className="h-4 w-4" /></Button><div className="flex items-center px-3 text-[11px] font-bold text-slate-400 min-w-[50px] justify-center">{Math.round(viewState.zoom * 100)}%</div><Button onClick={() => setViewState(p => ({ ...p, targetZoom: Math.min(3, p.targetZoom * 1.2) }))} variant="ghost" size="icon" className="h-9 w-9 text-slate-500"><ZoomIn className="h-4 w-4" /></Button>
         </div>
         <Button onClick={handleFitToScreen} variant="outline" size="icon" className="h-11 w-11 rounded-xl border-slate-200 text-slate-500 shadow-sm hover:bg-white"><Maximize2 className="h-4 w-4" /></Button>
-        <Button onClick={() => updateFactory(history[history.length-1])} disabled={history.length === 0} variant="outline" size="icon" className="h-11 w-11 rounded-xl border-slate-200 text-slate-500 shadow-sm hover:bg-white"><RotateCcw className="h-4 w-4" /></Button>
+        <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+          <Button onClick={undo} disabled={history.length === 0} variant="ghost" size="icon" className="h-9 w-9 text-slate-500 disabled:opacity-30"><Undo2 className="h-4 w-4" /></Button>
+          <Button onClick={redo} disabled={redoStack.length === 0} variant="ghost" size="icon" className="h-9 w-9 text-slate-500 disabled:opacity-30"><Redo2 className="h-4 w-4" /></Button>
+        </div>
         <Button onClick={() => setShowGrid(!showGrid)} variant={showGrid ? "default" : "outline"} className={`rounded-xl font-bold h-11 ${showGrid ? 'bg-slate-800' : 'border-slate-200 text-slate-500 hover:bg-white'}`}><Grid3x3 className="h-4 w-4 mr-2" /> Grid</Button>
       </div>
 
@@ -653,23 +773,35 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
                     </div>
                   )}
                   <div className="grid grid-cols-2 gap-5">
-                    <div className="space-y-2"><label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">X Pos</label><input type="text" value={localInputs.x || ''} onChange={e => updateSelectedItem('x', e.target.value)} onBlur={syncLocalInputs} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 transition-all" /></div>
-                    <div className="space-y-2"><label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Y Pos</label><input type="text" value={localInputs.y || ''} onChange={e => updateSelectedItem('y', e.target.value)} onBlur={syncLocalInputs} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 transition-all" /></div>
+                    <div className="space-y-2"><label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">X Pos</label><input type="text" value={localInputs.x || ''} onChange={e => updateSelectedItem('x', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 transition-all" /></div>
+                    <div className="space-y-2"><label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Y Pos</label><input type="text" value={localInputs.y || ''} onChange={e => updateSelectedItem('y', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 transition-all" /></div>
                   </div>
                   <div className="grid grid-cols-2 gap-5">
-                    <div className="space-y-2"><label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Width</label><input type="text" value={localInputs.width || ''} onChange={e => updateSelectedItem('width', e.target.value)} onBlur={syncLocalInputs} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 transition-all" /></div>
-                    <div className="space-y-2"><label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Height</label><input type="text" value={localInputs.height || ''} onChange={e => updateSelectedItem('height', e.target.value)} onBlur={syncLocalInputs} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 transition-all" /></div>
+                    <div className="space-y-2"><label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Width</label><input type="text" value={localInputs.width || ''} onChange={e => updateSelectedItem('width', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 transition-all" /></div>
+                    <div className="space-y-2"><label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Height</label><input type="text" value={localInputs.height || ''} onChange={e => updateSelectedItem('height', e.target.value)} onFocus={handleInputFocus} onBlur={handleInputBlur} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 transition-all" /></div>
                   </div>
-                  <div className="pt-4"><Button onClick={() => { setSelectedWcId(null); setSelectedAreaId(null); }} className="w-full rounded-2xl bg-white text-slate-900 font-black uppercase text-[10px] tracking-widest h-12 hover:bg-slate-100 shadow-xl transition-all active:scale-[0.98]">Done Editing</Button></div>
+                  <div className="pt-4 flex gap-3">
+                    <Button onClick={() => { if (selectedWcId) deleteWc(selectedWcId); else if (selectedAreaId) deleteArea(selectedAreaId); }} variant="outline" className="flex-1 rounded-2xl border-rose-200 text-rose-600 font-black uppercase text-[10px] tracking-widest h-12 hover:bg-rose-50 hover:border-rose-300 shadow-sm transition-all"><Trash2 className="h-4 w-4 mr-2" /> Delete</Button>
+                    <Button onClick={() => { setSelectedWcId(null); setSelectedAreaId(null); }} className="flex-[2] rounded-2xl bg-white text-slate-900 border border-slate-200 font-black uppercase text-[10px] tracking-widest h-12 hover:bg-slate-50 shadow-sm transition-all active:scale-[0.98]">Done Editing</Button>
+                  </div>
                 </div>
               </div>
             )}
 
             <div>
-              <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><LayoutGrid className="h-4 w-4" /> Assembly Units</h3>
+              <div className="flex items-center justify-between mb-4 mt-2">
+                <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><LayoutGrid className="h-4 w-4" /> Assembly Units</h3>
+              </div>
               <div className="space-y-2">
                 {factory.areas.map((area: any) => (
-                  <div key={area.id} onClick={() => { setSelectedAreaId(area.id); setSelectedWcId(null); }} className={`p-4 rounded-2xl border cursor-pointer transition-all flex justify-between items-center group ${selectedAreaId === area.id ? 'bg-white border-slate-900 shadow-lg ring-1 ring-slate-100' : 'bg-white border-slate-100 hover:border-slate-200 shadow-sm'}`}><div className="flex items-center gap-3"><input type="checkbox" checked={selectedAreaId === area.id} readOnly className="h-4 w-4 accent-slate-900 rounded border-slate-300" /><span className={`text-xs font-black uppercase tracking-wide transition-colors ${selectedAreaId === area.id ? 'text-slate-900' : 'text-slate-500 group-hover:text-slate-900'}`}>{area.areaName}</span></div><ChevronRight className={`h-4 w-4 transition-all ${selectedAreaId === area.id ? 'text-slate-900 translate-x-1' : 'text-slate-300'}`} /></div>
+                  <div key={area.id} className="flex flex-col gap-1">
+                    <div onClick={() => { setSelectedAreaId(area.id); setSelectedWcId(null); }} className={`p-4 rounded-2xl border cursor-pointer transition-all flex justify-between items-center group ${selectedAreaId === area.id ? 'bg-white border-slate-900 shadow-lg ring-1 ring-slate-100' : 'bg-white border-slate-100 hover:border-slate-200 shadow-sm'}`}><div className="flex items-center gap-3"><input type="checkbox" checked={selectedAreaId === area.id} readOnly className="h-4 w-4 accent-slate-900 rounded border-slate-300" /><span className={`text-xs font-black uppercase tracking-wide transition-colors ${selectedAreaId === area.id ? 'text-slate-900' : 'text-slate-500 group-hover:text-slate-900'}`}>{area.areaName}</span></div><ChevronRight className={`h-4 w-4 transition-all ${selectedAreaId === area.id ? 'text-slate-900 translate-x-1' : 'text-slate-300'}`} /></div>
+                    {selectedAreaId === area.id && (
+                      <div className="px-2 pb-2 pt-1 animate-in slide-in-from-top-2 duration-200">
+                        <Button onClick={() => addWorkstation(area.id)} variant="outline" className="w-full rounded-xl border-dashed border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-400 h-9 text-[10px] font-bold uppercase tracking-widest bg-slate-50/50"><Plus className="h-3 w-3 mr-2" /> Add Workstation</Button>
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>

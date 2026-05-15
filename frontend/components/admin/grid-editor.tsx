@@ -814,7 +814,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
         <Button onClick={downloadCSV} variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white"><Download className="h-4 w-4 mr-2" /> Download CSV</Button>
         <div className="flex-1" />
         <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
-          <Button onClick={() => setViewState(p => ({ ...p, targetZoom: Math.max(0.35, p.targetZoom / 1.2) }))} variant="ghost" size="icon" className="h-9 w-9 text-slate-500"><ZoomOut className="h-4 w-4" /></Button><div className="flex items-center px-3 text-[11px] font-bold text-slate-400 min-w-[50px] justify-center">{Math.round(viewState.zoom * 100)}%</div><Button onClick={() => setViewState(p => ({ ...p, targetZoom: Math.min(3, p.targetZoom * 1.2) }))} variant="ghost" size="icon" className="h-9 w-9 text-slate-500"><ZoomIn className="h-4 w-4" /></Button>
+          <Button onClick={() => setViewState(p => ({ ...p, targetZoom: Math.max(0.2, p.targetZoom / 1.2) }))} variant="ghost" size="icon" className="h-9 w-9 text-slate-500"><ZoomOut className="h-4 w-4" /></Button><div className="flex items-center px-3 text-[11px] font-bold text-slate-400 min-w-[50px] justify-center">{Math.round(viewState.zoom * 100)}%</div><Button onClick={() => setViewState(p => ({ ...p, targetZoom: Math.min(3, p.targetZoom * 1.2) }))} variant="ghost" size="icon" className="h-9 w-9 text-slate-500"><ZoomIn className="h-4 w-4" /></Button>
         </div>
         <Button onClick={handleFitToScreen} variant="outline" size="icon" className="h-11 w-11 rounded-xl border-slate-200 text-slate-500 shadow-sm hover:bg-white"><Maximize2 className="h-4 w-4" /></Button>
         <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
@@ -889,7 +889,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
         </div>
 
         <div ref={containerRef} className="flex-1 relative bg-[#0f172a] cursor-crosshair">
-          <canvas ref={canvasRef} className="w-full h-full block" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={e => setViewState(p => ({ ...p, targetZoom: Math.max(0.1, Math.min(5, p.targetZoom * (e.deltaY > 0 ? 0.9 : 1.1))) }))} />
+          <canvas ref={canvasRef} className="w-full h-full block" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={e => setViewState(p => ({ ...p, targetZoom: Math.max(0.2, Math.min(5, p.targetZoom * (e.deltaY > 0 ? 0.9 : 1.1))) }))} />
           <div className="absolute bottom-6 left-6 flex items-center gap-6 px-6 py-3 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200 shadow-2xl z-20">
             <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter"><Move className="h-4 w-4 text-slate-400" /> Pan: Click Space & Drag</div><div className="h-4 w-px bg-slate-200"></div>
             <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter"><Search className="h-4 w-4 text-slate-400" /> Zoom: Scroll</div><div className="h-4 w-px bg-slate-200"></div>

@@ -2,12 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Upload, Download, FileText, CheckCircle, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Upload, Download, FileText, CheckCircle, AlertCircle, LogOut } from 'lucide-react';
 import { generateSampleCSV } from '@/lib/csv-handler';
 import { Factory } from '@/lib/types';
+import { logout } from '@/lib/auth';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function DeveloperPage() {
+    const router = useRouter();
     const [file, setFile] = useState<File | null>(null);
     const [uploading, setUploading] = useState(false);
     const [success, setSuccess] = useState(false);
@@ -95,16 +98,20 @@ export default function DeveloperPage() {
     return (
         <div className="min-h-screen bg-slate-50 p-8">
             <div className="mx-auto max-w-5xl space-y-8">
-                <div className="flex items-center gap-4">
-                    <Link href="/">
-                        <Button variant="ghost" size="icon" className="rounded-full">
-                            <ArrowLeft className="h-5 w-5" />
-                        </Button>
-                    </Link>
-                    <div>
-                        <h1 className="text-3xl font-bold text-slate-900">Developer Portal</h1>
-                        <p className="text-slate-500">Manage factory layout definitions.</p>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div>
+                            <h1 className="text-3xl font-bold text-slate-900">Developer Portal</h1>
+                            <p className="text-slate-500">Manage factory layout definitions.</p>
+                        </div>
                     </div>
+                    <button 
+                        onClick={() => { logout(); router.push('/'); }} 
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                    >
+                        <LogOut className="h-4 w-4" />
+                        Logout
+                    </button>
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-2">

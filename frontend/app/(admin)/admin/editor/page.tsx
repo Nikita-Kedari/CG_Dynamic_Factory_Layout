@@ -31,38 +31,106 @@ export default function EditorPage() {
     const params = new URLSearchParams(window.location.search);
     const id = params.get('id');
 
-    // Use full URL to avoid port confusion
-    const baseUrl = 'http://localhost:4000/api';
-    
-    fetch(`${baseUrl}/layouts`)
-      .then(res => res.json())
-      .then(data => {
-        if (!Array.isArray(data)) {
-          console.warn('Backend returned non-array data. Using fallback.');
-          return;
-        }
+    if (!id) {
+      setLoading(false);
+      return;
+    }
 
-        if (id) {
-          const matched = data.find((l: any) => l.id.toString() === id.toString());
-          if (matched) {
-            setLayoutData(matched.factory);
-            setLayoutId(matched.id);
-            setLayoutName(matched.name);
+    const tryLoading = async () => {
+      try {
+        // 1. Try Local Mock Store first (for fresh uploads)
+        const localRes = await fetch(`/api/layouts/${id}`);
+        if (localRes.ok) {
+          const localData = await localRes.json();
+          if (localData.factory) {
+            setLayoutData(localData.factory);
+            setLayoutId(localData.id);
+            setLayoutName(localData.name || localData.version);
+            setLoading(false);
             return;
           }
         }
-        
-        const active = data.find((l: any) => l.isActive) || data[0];
-        if (active) {
-          setLayoutData(active.factory);
-          setLayoutId(active.id);
-          setLayoutName(active.name);
+
+        // 2. Fallback to SQL Backend (for production data)
+        const baseUrl = 'http://localhost:4000/api';
+        const backendRes = await fetch(`${baseUrl}/layouts/${id}/view`);
+        if (backendRes.ok) {
+          const data = await backendRes.json();
+          if (data.error) throw new Error(data.error);
+
+          // Map backend database structure to frontend Factory type
+          const mappedFactory = {
+            id: data.version.layout_id.toString(),
+            name: data.version.layout_name,
+            width: data.canvas.width,
+            height: data.canvas.length,
+            gridUnit: 50,
+            areas: (data.areas || []).map((a: any) => ({
+              id: a.area_id.toString(),
+              areaId: a.area_code || a.area_id.toString(),
+              areaName: a.area_name,
+              x: a.pos_x,
+              y: a.pos_y,
+              width: a.width,
+              height: a.length,
+              lines: (a.lines || []).map((l: any) => ({
+                id: l.line_id.toString(),
+                lineId: l.line_code || l.line_id.toString(),
+                lineName: l.line_name,
+                x: l.pos_x,
+                y: l.pos_y,
+                width: l.width,
+                height: l.length,
+                lineType: l.line_type || 'Straight',
+              workCenters: (l.workstations || []).map((w: any) => ({
+                id: w.ws_id.toString(),
+                workCenterId: w.ws_code || w.ws_id.toString(),
+                name: w.ws_name || w.ws_code || `W${w.ws_id}`,
+                machineName: w.ws_name,
+                x: w.pos_x,
+                y: w.pos_y,
+                width: w.width,
+                height: w.length,
+                status: w.status || 'operational',
+                detail: w.detail,
+                parameters: { 
+                  ...w,
+                  ws_id: w.ws_code || w.ws_id.toString(),
+                  oee: w.oee || 0,
+                  orders: w.orders || 0
+                }
+              }))
+              })),
+              buffers: [],
+              storage: []
+            })),
+            flows: (data.areas || []).flatMap((a: any) => 
+              (a.lines || []).flatMap((l: any) => 
+                (l.workstations || []).flatMap((w: any) => 
+                  (w.flows || []).map((f: any) => ({
+                    id: f.flow_id.toString(),
+                    fromWsId: f.from_ws_id.toString(),
+                    toWsId: f.to_ws_id.toString(),
+                    arrowType: f.arrow_type || 'escalator',
+                    label: f.flow_label || 'Flow'
+                  }))
+                )
+              )
+            )
+          };
+
+          setLayoutData(mappedFactory);
+          setLayoutId(data.version.layout_version_id);
+          setLayoutName(data.version.version_name);
         }
-      })
-      .catch(err => {
-        console.warn('Backend fetch failed. Using fallback factory.', err);
-      })
-      .finally(() => setLoading(false));
+      } catch (err) {
+        console.warn('Layout loading failed:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    tryLoading();
   }, []);
 
   const handleLogout = () => {

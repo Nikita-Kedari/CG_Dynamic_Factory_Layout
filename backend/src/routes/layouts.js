@@ -199,18 +199,27 @@ router.post('/:id/reject', async (req, res) => {
 // Body: { admin_comments, reviewed_by }
 // ──────────────────────────────────────────────
 router.post('/:id/comment', async (req, res) => {
-  const { admin_comments = '', reviewed_by = 'admin' } = req.body;
+  const { admin_comments = '', reviewed_by = 'admin', status } = req.body;
   try {
     const pool = await getPool();
-    await pool.request()
+    let query = `
+      UPDATE LAYOUT_VERSIONS
+      SET admin_comments = @comments, reviewed_by = @by, reviewed_at = GETDATE()
+    `;
+    
+    const request = pool.request()
       .input('vid',      sql.Int,      parseInt(req.params.id))
       .input('comments', sql.NVarChar, admin_comments)
-      .input('by',       sql.NVarChar, reviewed_by)
-      .query(`
-        UPDATE LAYOUT_VERSIONS
-        SET admin_comments = @comments, reviewed_by = @by, reviewed_at = GETDATE()
-        WHERE layout_version_id = @vid
-      `);
+      .input('by',       sql.NVarChar, reviewed_by);
+
+    if (status) {
+      query += `, status = @status `;
+      request.input('status', sql.NVarChar, status);
+    }
+
+    query += ` WHERE layout_version_id = @vid`;
+    
+    await request.query(query);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

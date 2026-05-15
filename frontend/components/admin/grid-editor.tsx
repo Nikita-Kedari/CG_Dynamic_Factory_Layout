@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-
-import { ZoomIn, ZoomOut, Maximize2, Grid3x3, RotateCcw, Save, ArrowLeft, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity, AlertCircle } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Grid3x3, RotateCcw, Save, ArrowLeft, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity, AlertCircle, CheckSquare, CheckCircle2, XCircle, Send, Search, Checkbox } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { threeAssembliesFactory } from '@/lib/three-assemblies';
 import { parseCSV } from '@/lib/csv-handler';
@@ -15,15 +14,7 @@ interface GridEditorProps {
   layoutId?: string | null;
 }
 
-// Rounded Rectangle Utility (mirrors dashboard)
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  radius: number
-) {
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) {
   if (width < 2 * radius) radius = width / 2;
   if (height < 2 * radius) radius = height / 2;
   ctx.beginPath();
@@ -35,1476 +26,486 @@ function roundRect(
   ctx.closePath();
 }
 
-// Helper: Get first and last workstations per area based on wsSequence
-function getAreaBoundaryWorkcenters(factory: any) {
-  if (!factory?.areas) return [];
-
-  const areaBoundaries: { area: any; first: any; last: any }[] = [];
-
-  factory.areas.forEach((area: any) => {
-    const workCenters: any[] = [];
-    area.lines?.forEach((line: any) => {
-      line.workCenters?.forEach((wc: any) => {
-        workCenters.push({ ...wc, areaId: area.id });
-      });
-    });
-
-    if (workCenters.length === 0) return;
-
-    // Sort by wsSequence, fallback to id if sequence not available
-    workCenters.sort((a, b) => {
-      if (a.wsSequence !== undefined && b.wsSequence !== undefined) {
-        return a.wsSequence - b.wsSequence;
-      }
-      return parseInt(a.id) - parseInt(b.id);
-    });
-
-    areaBoundaries.push({
-      area,
-      first: workCenters[0],
-      last: workCenters[workCenters.length - 1]
-    });
-  });
-
-  return areaBoundaries;
-}
-
-const EXCEL_WORKSTATIONS: Record<string, {
-  ws_id: string;
-  process: string;
-  machine: string;
-  status: 'Running' | 'Idle' | 'Bottleneck' | 'Down' | 'Critical';
-  cycle_time: string;
-  oee: string;
-  throughput: string;
-  mtbf: string;
-  mttr: string;
-  quality: string;
-  special_kpi: string;
-  process_type: string;
-  machine_type: string;
-  key_function: string;
-  critical_hover_kpis: string;
-  orders: string;
-}> = {
-  // ── Chassis Assembly (W1–W9) ────────────────────────────────────────────────
-  // Source: Factory_Workstation_Breakdown.xlsx → "Chassis Assembly" sheet
-  w1: { ws_id: 'W1', process: 'Base Loading', machine: 'Conveyor', status: 'Running', cycle_time: '40 (Target 38)', oee: '92', throughput: '90', mtbf: '150', mttr: '10', quality: '99.5', special_kpi: 'Input Delay: 2s', process_type: 'Base Loading', machine_type: 'Conveyor + Fixture', key_function: 'Load chassis base', critical_hover_kpis: 'Status, Cycle Time, Throughput', orders: 'ORD-001' },
-  w2: { ws_id: 'W2', process: 'Alignment', machine: 'Positioning', status: 'Running', cycle_time: '45', oee: '90', throughput: '80', mtbf: '140', mttr: '12', quality: '99.2', special_kpi: 'Alignment Error: 0.3mm', process_type: 'Alignment', machine_type: 'Positioning System', key_function: 'Align frame', critical_hover_kpis: 'Alignment Accuracy, Cycle Time', orders: 'ORD-002' },
-  w3: { ws_id: 'W3', process: 'Welding 1', machine: 'Robot', status: 'Idle', cycle_time: '55', oee: '85', throughput: '70', mtbf: '120', mttr: '15', quality: '97.8', special_kpi: 'Weld Temp: 1450°C', process_type: 'Welding 1', machine_type: 'Robotic Welding', key_function: 'Initial weld joints', critical_hover_kpis: 'OEE, Weld Temp, Defects', orders: 'ORD-003' },
-  w4: { ws_id: 'W4', process: 'Welding 2', machine: 'Robot', status: 'Running', cycle_time: '50', oee: '88', throughput: '75', mtbf: '130', mttr: '14', quality: '98.5', special_kpi: 'Weld Strength: OK', process_type: 'Welding 2', machine_type: 'Robotic Arm', key_function: 'Structural welding', critical_hover_kpis: 'MTBF, Weld Quality', orders: 'ORD-004' },
-  w5: { ws_id: 'W5', process: 'Central Join', machine: 'Multi-axis Robot', status: 'Bottleneck', cycle_time: '60 (Target 50)', oee: '78', throughput: '60', mtbf: '110', mttr: '20', quality: '97', special_kpi: 'Bottleneck: YES', process_type: 'Central Join', machine_type: 'Multi-axis Robot', key_function: 'Main chassis join', critical_hover_kpis: 'Bottleneck Flag, Cycle Time', orders: 'ORD-005' },
-  w6: { ws_id: 'W6', process: 'Welding 3', machine: 'Robot', status: 'Running', cycle_time: '52', oee: '86', throughput: '72', mtbf: '125', mttr: '15', quality: '98.2', special_kpi: 'Arc Stability: Good', process_type: 'Welding 3', machine_type: 'Robotic Welding', key_function: 'Side weld', critical_hover_kpis: 'Throughput, Defects', orders: 'ORD-006' },
-  w7: { ws_id: 'W7', process: 'Inspection', machine: 'Vision System', status: 'Running', cycle_time: '30', oee: '95', throughput: '110', mtbf: '200', mttr: '8', quality: '99.8', special_kpi: 'Defect Rate: 0.5%', process_type: 'Inspection 1', machine_type: 'Vision System', key_function: 'Weld inspection', critical_hover_kpis: 'Pass/Fail, Defect Rate', orders: 'ORD-007' },
-  w8: { ws_id: 'W8', process: 'Reinforcement', machine: 'Hybrid', status: 'Idle', cycle_time: '65', oee: '82', throughput: '65', mtbf: '100', mttr: '18', quality: '97.5', special_kpi: 'Operator: ID102', process_type: 'Reinforcement', machine_type: 'Manual/Robot Hybrid', key_function: 'Reinforcement fitting', critical_hover_kpis: 'Operator ID, Cycle Time', orders: 'ORD-008' },
-  w9: { ws_id: 'W9', process: 'Transfer', machine: 'Conveyor', status: 'Running', cycle_time: '20', oee: '96', throughput: '120', mtbf: '220', mttr: '5', quality: '—', special_kpi: 'Queue: 3 units', process_type: 'Output Transfer', machine_type: 'Conveyor', key_function: 'Move to next line', critical_hover_kpis: 'Line Balance, Waiting Status', orders: 'ORD-009' },
-
-  // ── Main Framing Assembly (W10–W18) ─────────────────────────────────────────
-  // Source: Factory_Workstation_Breakdown.xlsx → "Main Framing" sheet
-  w10: { ws_id: 'W10', process: 'Input', machine: 'Conveyor', status: 'Running', cycle_time: '25', oee: '94', throughput: '130', mtbf: '200', mttr: '6', quality: '—', special_kpi: 'Input Rate Stable', process_type: 'Frame Input', machine_type: 'Conveyor', key_function: 'Receive chassis', critical_hover_kpis: 'Status, Input Rate', orders: 'ORD-010' },
-  w11: { ws_id: 'W11', process: 'Assembly 1', machine: 'Robot', status: 'Running', cycle_time: '48', oee: '89', throughput: '78', mtbf: '135', mttr: '12', quality: '98.7', special_kpi: 'Load Balance OK', process_type: 'Frame Assembly 1', machine_type: 'Robot', key_function: 'Frame build', critical_hover_kpis: 'Cycle Time, OEE', orders: 'ORD-011' },
-  w12: { ws_id: 'W12', process: 'Assembly 2', machine: 'Robot', status: 'Idle', cycle_time: '52', oee: '84', throughput: '72', mtbf: '120', mttr: '15', quality: '97.9', special_kpi: 'Minor Delay', process_type: 'Frame Assembly 2', machine_type: 'Robot', key_function: 'Structural assembly', critical_hover_kpis: 'MTTR, Throughput', orders: 'ORD-012' },
-  w13: { ws_id: 'W13', process: 'Fastening', machine: 'Nutrunner', status: 'Running', cycle_time: '35', oee: '91', throughput: '100', mtbf: '160', mttr: '10', quality: '99.1', special_kpi: 'Torque: 45 Nm', process_type: 'Fastening', machine_type: 'Nutrunner', key_function: 'Bolt fastening', critical_hover_kpis: 'Torque Value, Quality', orders: 'ORD-013' },
-  w14: { ws_id: 'W14', process: 'Alignment', machine: 'Vision', status: 'Running', cycle_time: '28', oee: '95', throughput: '115', mtbf: '210', mttr: '7', quality: '99.6', special_kpi: 'Accuracy: 99.4%', process_type: 'Alignment Check', machine_type: 'Vision + Sensors', key_function: 'Dimensional check', critical_hover_kpis: 'Accuracy %, Rejection', orders: 'ORD-014' },
-  w15: { ws_id: 'W15', process: 'Transfer', machine: 'Lift Conveyor', status: 'Down', cycle_time: '—', oee: '60', throughput: '0', mtbf: '90', mttr: '25', quality: '—', special_kpi: 'Fault: Motor', process_type: 'Vertical Transfer', machine_type: 'Lift Conveyor', key_function: 'Move down line', critical_hover_kpis: 'Delay Time', orders: 'ORD-015' },
-  w16: { ws_id: 'W16', process: 'Sub Assembly', machine: 'Robot', status: 'Idle', cycle_time: '50', oee: '83', throughput: '70', mtbf: '110', mttr: '16', quality: '98', special_kpi: 'Waiting Input', process_type: 'Sub Assembly', machine_type: 'Robot', key_function: 'Add sub-parts', critical_hover_kpis: 'OEE, Cycle Time', orders: 'ORD-016' },
-  w17: { ws_id: 'W17', process: 'Inspection', machine: 'Vision', status: 'Running', cycle_time: '30', oee: '96', throughput: '110', mtbf: '220', mttr: '6', quality: '99.7', special_kpi: 'Pass Rate High', process_type: 'Inspection 2', machine_type: 'Vision System', key_function: 'Check assembly', critical_hover_kpis: 'Pass Rate', orders: 'ORD-017' },
-  w18: { ws_id: 'W18', process: 'Output', machine: 'Conveyor', status: 'Running', cycle_time: '22', oee: '95', throughput: '120', mtbf: '210', mttr: '5', quality: '—', special_kpi: 'Flow Smooth', process_type: 'Output Transfer', machine_type: 'Conveyor', key_function: 'Send to engine line', critical_hover_kpis: 'Flow Rate', orders: 'ORD-018' },
-
-  // ── Engine Assembly (W19–W27) ────────────────────────────────────────────────
-  // Source: Factory_Workstation_Breakdown.xlsx → "Engine Assembly" sheet
-  w19: { ws_id: 'W19', process: 'Input', machine: 'Conveyor', status: 'Running', cycle_time: '20', oee: '95', throughput: '140', mtbf: '230', mttr: '5', quality: '—', special_kpi: 'Input Stable', process_type: 'Engine Input', machine_type: 'Conveyor', key_function: 'Engine arrival', critical_hover_kpis: 'Status', orders: 'ORD-019' },
-  w20: { ws_id: 'W20', process: 'Mount Prep', machine: 'Fixture', status: 'Running', cycle_time: '38', oee: '90', throughput: '95', mtbf: '150', mttr: '10', quality: '99', special_kpi: 'Prep Accuracy', process_type: 'Mount Prep', machine_type: 'Fixture System', key_function: 'Prepare mount', critical_hover_kpis: 'Cycle Time', orders: 'ORD-020' },
-  w21: { ws_id: 'W21', process: 'Mounting', machine: 'Robot', status: 'Running', cycle_time: '50', oee: '88', throughput: '80', mtbf: '130', mttr: '12', quality: '98.6', special_kpi: 'Alignment OK', process_type: 'Engine Mounting', machine_type: 'Robot', key_function: 'Mount engine', critical_hover_kpis: 'Accuracy, Cycle Time', orders: 'ORD-021' },
-  w22: { ws_id: 'W22', process: 'Fastening', machine: 'Nutrunner', status: 'Running', cycle_time: '32', oee: '92', throughput: '110', mtbf: '170', mttr: '9', quality: '99.3', special_kpi: 'Torque: 50 Nm', process_type: 'Fastening', machine_type: 'Nutrunner', key_function: 'Tightening', critical_hover_kpis: 'Torque, Quality', orders: 'ORD-022' },
-  w23: { ws_id: 'W23', process: 'Fluid Connect', machine: 'Semi-auto', status: 'Idle', cycle_time: '45', oee: '85', throughput: '75', mtbf: '120', mttr: '14', quality: '97.5', special_kpi: 'Leak Risk', process_type: 'Fluid Connect', machine_type: 'Semi-auto', key_function: 'Connect pipes', critical_hover_kpis: 'Leak Status', orders: 'ORD-023' },
-  w24: { ws_id: 'W24', process: 'Electrical', machine: 'Hybrid', status: 'Running', cycle_time: '40', oee: '89', throughput: '90', mtbf: '140', mttr: '11', quality: '98.8', special_kpi: 'Error: 0.8%', process_type: 'Electrical Connect', machine_type: 'Manual/Robot', key_function: 'Wiring', critical_hover_kpis: 'Error Rate', orders: 'ORD-024' },
-  w25: { ws_id: 'W25', process: 'Testing', machine: 'Diagnostic', status: 'Critical', cycle_time: '70', oee: '75', throughput: '50', mtbf: '100', mttr: '20', quality: '96.5', special_kpi: 'Error Code: E204', process_type: 'Testing', machine_type: 'Diagnostic System', key_function: 'Engine test', critical_hover_kpis: 'Pass/Fail, Error Codes', orders: 'ORD-025' },
-  w26: { ws_id: 'W26', process: 'Inspection', machine: 'Vision', status: 'Running', cycle_time: '35', oee: '94', throughput: '105', mtbf: '210', mttr: '6', quality: '99.5', special_kpi: 'Yield High', process_type: 'Final Inspection', machine_type: 'Vision + Sensors', key_function: 'Final QC', critical_hover_kpis: 'Yield %', orders: 'ORD-026' },
-  w27: { ws_id: 'W27', process: 'Dispatch', machine: 'Conveyor', status: 'Running', cycle_time: '18', oee: '96', throughput: '150', mtbf: '240', mttr: '4', quality: '—', special_kpi: 'Queue: 1', process_type: 'Dispatch', machine_type: 'Conveyor', key_function: 'Send to next stage', critical_hover_kpis: 'Throughput', orders: 'ORD-027' },
-};
-
-const validateLineFit = (area: any, line: any, type: string) => {
-  const count = line.workCenters?.length || 0;
-  if (count === 0) return { fits: true };
-
-  // Approximate space per machine (100x100 with gap)
-  const unitSize = 100;
-  let reqW = 0, reqH = 0;
-
-  switch (type) {
-    case 'L-Type':
-      reqW = Math.ceil(count / 2) * unitSize;
-      reqH = Math.ceil(count / 2) * unitSize;
-      break;
-    case 'U-Type':
-    case 'Inverted U-Type':
-      reqW = Math.ceil(count / 3) * unitSize;
-      reqH = 3 * unitSize;
-      break;
-    case 'Straight':
-    default:
-      reqW = count * unitSize;
-      reqH = unitSize;
-      break;
-  }
-
-  const fits = area.width >= reqW && area.height >= reqH;
-  return { fits, reqW, reqH };
+const EXCEL_WORKSTATIONS: Record<string, any> = {
+  w1: { ws_id: 'W1', process: 'Base Loading', machine: 'Conveyor', status: 'Running', oee: '92', orders: 'ORD-001' },
+  w2: { ws_id: 'W2', process: 'Alignment', machine: 'Positioning', status: 'Running', oee: '90', orders: 'ORD-002' },
+  w3: { ws_id: 'W3', process: 'Welding 1', machine: 'Robot', status: 'Idle', oee: '85', orders: 'ORD-003' },
+  w4: { ws_id: 'W4', process: 'Welding 2', machine: 'Robot', status: 'Running', oee: '88', orders: 'ORD-004' },
+  w5: { ws_id: 'W5', process: 'Central Join', machine: 'Multi-axis Robot', status: 'Bottleneck', oee: '78', orders: 'ORD-005' },
+  w6: { ws_id: 'W6', process: 'Welding 3', machine: 'Robot', status: 'Running', oee: '86', orders: 'ORD-006' },
+  w7: { ws_id: 'W7', process: 'Inspection', machine: 'Vision System', status: 'Running', oee: '95', orders: 'ORD-007' },
+  w8: { ws_id: 'W8', process: 'Reinforcement', machine: 'Hybrid', status: 'Idle', oee: '82', orders: 'ORD-008' },
+  w9: { ws_id: 'W9', process: 'Transfer', machine: 'Conveyor', status: 'Running', oee: '96', orders: 'ORD-009' },
+  w10: { ws_id: 'W10', process: 'Input', machine: 'Conveyor', status: 'Running', oee: '94', orders: 'ORD-010' },
+  w11: { ws_id: 'W11', process: 'Assembly 1', machine: 'Robot', status: 'Running', oee: '89', orders: 'ORD-011' },
+  w12: { ws_id: 'W12', process: 'Assembly 2', machine: 'Robot', status: 'Idle', oee: '84', orders: 'ORD-012' },
+  w13: { ws_id: 'W13', process: 'Fastening', machine: 'Nutrunner', status: 'Running', oee: '91', orders: 'ORD-013' },
+  w14: { ws_id: 'W14', process: 'Alignment', machine: 'Vision', status: 'Running', oee: '95', orders: 'ORD-014' },
+  w15: { ws_id: 'W15', process: 'Transfer', machine: 'Lift Conveyor', status: 'Down', oee: '60', orders: 'ORD-015' },
+  w16: { ws_id: 'W16', process: 'Sub Assembly', machine: 'Robot', status: 'Idle', oee: '83', orders: 'ORD-016' },
+  w17: { ws_id: 'W17', process: 'Inspection', machine: 'Vision', status: 'Running', oee: '96', orders: 'ORD-017' },
+  w18: { ws_id: 'W18', process: 'Output', machine: 'Conveyor', status: 'Running', oee: '95', orders: 'ORD-018' },
+  w19: { ws_id: 'W19', process: 'Input', machine: 'Conveyor', status: 'Running', oee: '95', orders: 'ORD-019' },
+  w20: { ws_id: 'W20', process: 'Mount Prep', machine: 'Fixture', status: 'Running', oee: '90', orders: 'ORD-020' },
+  w21: { ws_id: 'W21', process: 'Mounting', machine: 'Robot', status: 'Running', oee: '88', orders: 'ORD-021' },
+  w22: { ws_id: 'W22', process: 'Fastening', machine: 'Nutrunner', status: 'Running', oee: '92', orders: 'ORD-022' },
+  w23: { ws_id: 'W23', process: 'Fluid Connect', machine: 'Semi-auto', status: 'Idle', oee: '85', orders: 'ORD-023' },
+  w24: { ws_id: 'W24', process: 'Electrical', machine: 'Hybrid', status: 'Running', oee: '89', orders: 'ORD-024' },
+  w25: { ws_id: 'W25', process: 'Testing', machine: 'Diagnostic', status: 'Critical', oee: '75', orders: 'ORD-025' },
+  w26: { ws_id: 'W26', process: 'Inspection', machine: 'Vision', status: 'Running', oee: '94', orders: 'ORD-026' },
+  w27: { ws_id: 'W27', process: 'Dispatch', machine: 'Conveyor', status: 'Running', oee: '96', orders: 'ORD-027' },
 };
 
 export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly = false, layoutId = null }: GridEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number>(0);
+  const dragRef = useRef<{ type: 'pan' | 'wc' | 'area', id: string, areaId?: string, startX: number, startY: number, itemStartX: number, itemStartY: number } | null>(null);
 
   const [factory, setFactory] = useState(initialFactory || threeAssembliesFactory);
-  
-  // History for Undo/Redo
   const [history, setHistory] = useState<any[]>([]);
-  const [future, setFuture] = useState<any[]>([]);
-
-  const updateFactory = (newFactory: any, recordHistory = true) => {
-    if (recordHistory) {
-      setHistory(prev => [...prev, factory]);
-      setFuture([]);
-    }
-    setFactory(newFactory);
-  };
-
-  const undo = () => {
-    if (history.length === 0) return;
-    const prev = history[history.length - 1];
-    setFuture(f => [factory, ...f]);
-    setHistory(h => h.slice(0, -1));
-    setFactory(prev);
-  };
-
-  const redo = () => {
-    if (future.length === 0) return;
-    const next = future[0];
-    setHistory(h => [...h, factory]);
-    setFuture(f => f.slice(1));
-    setFactory(next);
-  };
+  const [viewState, setViewState] = useState({ zoom: 0.35, panX: 60, panY: 60, time: 0, targetZoom: 0.35, targetPanX: 60, targetPanY: 60 });
+  const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+  const [selectedWcId, setSelectedWcId] = useState<string | null>(null);
+  const [adminComment, setAdminComment] = useState('');
+  
+  // Dynamic Parameters State
+  const [availableParameters, setAvailableParameters] = useState<any[]>([]);
+  const [activeFilterIds, setActiveFilterIds] = useState<Record<string, boolean>>({ ws_id: true });
+  const [dynamicWorkstationData, setDynamicWorkstationData] = useState<any>({});
+  
   const [showGrid, setShowGrid] = useState(true);
   const [savedMsg, setSavedMsg] = useState(false);
   const [shareMsg, setShareMsg] = useState(false);
+  const [localInputs, setLocalInputs] = useState<Record<string, string>>({});
+  const [isPublicView, setIsPublicView] = useState(false);
 
-  // Smooth view state (same lerp system as dashboard)
-  const [viewState, setViewState] = useState({
-    zoom: 0.35, panX: 60, panY: 60, time: 0,
-    targetZoom: 0.35, targetPanX: 60, targetPanY: 60,
-  });
-
-  const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
-  const [hoveredEntity, setHoveredEntity] = useState<{ type: 'area' | 'machine'; id: string } | null>(null);
-  const [tooltipState, setTooltipState] = useState<{ x: number, y: number, wc?: any, text?: string } | null>(null);
-  const [draggingMachine, setDraggingMachine] = useState<{ id: string, areaId: string, lineId: string } | null>(null);
-  const [draggingAreaId, setDraggingAreaId] = useState<string | null>(null);
-  const dragOffsetRef = useRef({ x: 0, y: 0 });
-  const [areaLayoutTypes, setAreaLayoutTypes] = useState<Record<string, string>>({});
-  const [collapsedAreas, setCollapsedAreas] = useState<Record<string, boolean>>({});
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [editingWidth, setEditingWidth] = useState<string | null>(null);
-  const [editingHeight, setEditingHeight] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [tempAreaSize, setTempAreaSize] = useState<Record<string, { w?: number, h?: number }>>({});
-
-  const [allFilters, setAllFilters] = useState<any[]>([
-    { id: 'ws_id', label: 'Workstation ID', default: true, category: 'Identification', description: 'Unique identifier', icon: 'Fingerprint' },
-    { id: 'oee', label: 'OEE', default: true, category: 'Performance', description: 'Overall Equipment Effectiveness', icon: 'Zap' },
-    { id: 'orders', label: 'Orders', default: true, category: 'Performance', description: 'Current active orders', icon: 'List' }
-  ]);
-  const [activeFilterIds, setActiveFilterIds] = useState<Record<string, boolean>>({
-    ws_id: true,
-    oee: true,
-    orders: true
-  });
-  const [dynamicWorkstationData, setDynamicWorkstationData] = useState<any>({});
-
-  // Initialize Display Parameters (Dynamic from Backend XML)
   useEffect(() => {
-    const fetchAll = async () => {
-      // Use full URL to avoid port confusion (3000 vs 3001)
-      const baseUrl = 'http://localhost:4000/api';
-      
-      // 1. Fetch Dynamic Parameters (XML via API)
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('shared') === 'true') setIsPublicView(true);
+    }
+  }, []);
+
+  // 1. Fetch Dynamic Parameters List (Columns from SQL)
+  useEffect(() => {
+    const fetchParams = async () => {
       try {
-        const res = await fetch(`${baseUrl}/parameters`);
+        const res = await fetch('http://localhost:4000/api/parameters/sync');
         if (res.ok) {
-          const xmlText = await res.text();
-          const parser = new DOMParser();
-          const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
-          const paramNodes = xmlDoc.getElementsByTagName('parameter');
-          
-          const dynamicFilters = Array.from(paramNodes).map(node => ({
-            id: node.getElementsByTagName('id')[0]?.textContent || '',
-            label: node.getElementsByTagName('label')[0]?.textContent || '',
-            category: 'Performance',
-            description: `Field: ${node.getElementsByTagName('id')[0]?.textContent}`,
-            icon: 'Activity',
-            default: true
+          const data = await res.json();
+          const params = data.parameters.map((p: any) => ({
+            id: p.COLUMN_NAME.toLowerCase(),
+            label: p.COLUMN_NAME,
+            description: `SQL Column: ${p.DATA_TYPE}`
           }));
-          
-          const baseFilters = [
-            { id: 'ws_id', label: 'Workstation ID', default: true, category: 'Identification', description: 'Unique identifier', icon: 'Fingerprint' },
-            { id: 'oee', label: 'OEE', default: true, category: 'Performance', description: 'Overall Equipment Effectiveness', icon: 'Zap' },
-            { id: 'orders', label: 'Orders', default: true, category: 'Performance', description: 'Current active orders', icon: 'List' }
-          ];
-          
-          // Merge dynamic filters, avoiding duplicates
-          const seenIds = new Set(baseFilters.map(f => f.id));
-          const filteredDynamic = dynamicFilters.filter(f => !seenIds.has(f.id));
-          
-          const finalFilters = [...baseFilters, ...filteredDynamic];
-          setAllFilters(finalFilters);
-          
-          // Update active filters only for new items
+          setAvailableParameters(params);
+          // Auto-enable new parameters if they aren't in state
           setActiveFilterIds(prev => {
             const next = { ...prev };
-            filteredDynamic.forEach(f => {
-              if (next[f.id] === undefined) next[f.id] = true;
-            });
+            params.forEach((p: any) => { if (next[p.id] === undefined) next[p.id] = true; });
             return next;
           });
         }
-      } catch (err) {
-        console.warn('Backend connection failed. Using defaults.');
-      }
-
-      // 2. Fetch Workstation Data
-      try {
-        const dataRes = await fetch(`${baseUrl}/parameters/data`);
-        if (dataRes.ok) {
-          const data = await dataRes.json();
-          setDynamicWorkstationData(data);
-        }
-      } catch (err) {
-        // Fallback silently
-      }
+      } catch (err) {}
     };
-    
+    fetchParams();
+    const intv = setInterval(fetchParams, 10000); // Check for schema changes every 10s
+    return () => clearInterval(intv);
+  }, []);
+
+  // 2. Fetch Live Data (Values from SQL Rows)
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const res = await fetch('http://localhost:4000/api/parameters/data');
+        if (res.ok) setDynamicWorkstationData(await res.json());
+      } catch (err) {}
+    };
+    fetchAll();
+    const interval = setInterval(fetchAll, 10000); // 10 second polling as requested
+    return () => clearInterval(interval);
+  }, []);
+
+  const allFilters = [
+    { id: 'ws_id', label: 'Workstation ID', description: 'Unique identifier' },
+    ...availableParameters
+  ];
+
+  const clampFactory = (f: any) => {
+    f.areas.forEach((area: any) => {
+      area.lines.forEach((line: any) => {
+        line.workCenters.forEach((wc: any) => {
+          wc.x = Math.max(area.x, Math.min(area.x + area.width - wc.width, wc.x));
+          wc.y = Math.max(area.y, Math.min(area.y + area.height - wc.height, wc.y));
+        });
+      });
+    });
+    return f;
+  };
+
+  const updateFactory = (newFactory: any, recordHistory = true) => {
+    const clamped = clampFactory({ ...newFactory });
+    if (recordHistory) setHistory(prev => [...prev, factory]);
+    setFactory(clamped);
+  };
+
+  const handleFitToScreen = useCallback(() => {
+    const canvas = canvasRef.current; if (!canvas || !factory) return;
+    const pad = 120;
+    const scale = Math.min((canvas.width - pad * 2) / factory.width, (canvas.height - pad * 2) / factory.height, 1.0);
+    const targetZoom = Math.max(0.35, scale);
+    setViewState(prev => ({ ...prev, targetZoom, targetPanX: (canvas.width - factory.width * targetZoom) / 2, targetPanY: (canvas.height - factory.height * targetZoom) / 2 }));
+  }, [factory]);
+
+  const downloadCSV = () => {
+    let csv = "Area,Line,Workstation,WS Sequence,X,Y,Width,Height\n";
+    factory.areas.forEach((area: any) => {
+      area.lines.forEach((line: any) => {
+        line.workCenters.forEach((wc: any) => {
+          csv += `${area.areaName},${line.lineName},${wc.name},${wc.wsSequence || 0},${Math.round(wc.x)},${Math.round(wc.y)},${Math.round(wc.width)},${Math.round(wc.height)}\n`;
+        });
+      });
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.setAttribute('hidden', ''); a.setAttribute('href', url); a.setAttribute('download', `${factory.name}_layout.csv`);
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+
+  const getShareUrl = () => {
+    if (typeof window === 'undefined') return '';
+    const url = new URL(window.location.href);
+    url.searchParams.set('shared', 'true');
+    return url.toString();
+  };
+
+  useEffect(() => {
+    const fetchAll = async () => {
+      try {
+        const res = await fetch('http://localhost:4000/api/parameters/data');
+        if (res.ok) setDynamicWorkstationData(await res.json());
+      } catch (err) {}
+    };
     fetchAll();
     const interval = setInterval(fetchAll, 10000);
     return () => clearInterval(interval);
   }, []);
 
-  // Keyboard Shortcuts for Undo/Redo
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'z') {
-        e.preventDefault();
-        undo();
-      } else if (e.ctrlKey && (e.key === 'y' || (e.shiftKey && e.key === 'Z'))) {
-        e.preventDefault();
-        redo();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo, history, future]);
-
-  // Pan state
-  const isPanningRef = useRef(false);
-  const panStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
-  const hasDraggedRef = useRef(false);
-  const timeRef = useRef(0);
-
-  // Animation loop — frame-rate-independent lerp
   useEffect(() => {
     let lastTime = performance.now();
     const animate = (time: number) => {
       const delta = (time - lastTime) / 1000;
       lastTime = time;
-      setViewState(prev => {
-        const speed = 10;
-        const t = 1 - Math.exp(-speed * delta);
-        timeRef.current += delta;
-        return {
-          ...prev,
-          time: timeRef.current,
-          zoom: prev.zoom + (prev.targetZoom - prev.zoom) * t,
-          panX: prev.panX + (prev.targetPanX - prev.panX) * t,
-          panY: prev.panY + (prev.targetPanY - prev.panY) * t,
-        };
-      });
+      setViewState(prev => ({
+        ...prev,
+        time: prev.time + delta,
+        zoom: prev.zoom + (prev.targetZoom - prev.zoom) * (1 - Math.exp(-10 * delta)),
+        panX: prev.panX + (prev.targetPanX - prev.panX) * (1 - Math.exp(-10 * delta)),
+        panY: prev.panY + (prev.targetPanY - prev.panY) * (1 - Math.exp(-10 * delta)),
+      }));
       animationFrameRef.current = requestAnimationFrame(animate);
     };
     animationFrameRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationFrameRef.current!);
   }, []);
 
-  // Handle ResizeObserver to prevent canvas stretching
   useEffect(() => {
     const container = containerRef.current;
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
-
     const observer = new ResizeObserver(entries => {
       for (let entry of entries) {
         canvas.width = entry.contentRect.width;
         canvas.height = entry.contentRect.height;
       }
     });
-
     observer.observe(container);
     return () => observer.disconnect();
   }, []);
 
-  // Rendering — mirrors dashboard drawing style exactly
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-
     const { zoom, panX, panY } = viewState;
 
-    // Background
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = (isAdmin || isPublicView) ? '#0b0f19' : '#0f172a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Grid
-    const drawGridLines = (step: number, color: string, w: number) => {
-      ctx.beginPath();
-      const gridStep = step * zoom;
-      const offsetX = ((panX % gridStep) + gridStep) % gridStep;
-      const offsetY = ((panY % gridStep) + gridStep) % gridStep;
-      for (let x = offsetX; x < canvas.width; x += gridStep) {
-        ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height);
-      }
-      for (let y = offsetY; y < canvas.height; y += gridStep) {
-        ctx.moveTo(0, y); ctx.lineTo(canvas.width, y);
-      }
-      ctx.strokeStyle = color;
-      ctx.lineWidth = w;
-      ctx.stroke();
-    };
-
     if (showGrid) {
-      drawGridLines(10, 'rgba(30, 41, 59, 0.5)', 0.5); // fine subtle
-      drawGridLines(50, 'rgba(30, 41, 59, 0.9)', 1);   // major
+      const drawG = (step: number, color: string, w: number) => {
+        ctx.beginPath();
+        const gs = step * zoom;
+        const ox = ((panX % gs) + gs) % gs;
+        const oy = ((panY % gs) + gs) % gs;
+        for (let x = ox; x < canvas.width; x += gs) { ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); }
+        for (let y = oy; y < canvas.height; y += gs) { ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); }
+        ctx.strokeStyle = color; ctx.lineWidth = w; ctx.stroke();
+      };
+      drawG(50, 'rgba(30, 41, 59, 0.9)', 1);
     }
 
-    const drawGridClipped = (radius: number, cx: number, cy: number, cw: number, ch: number, color: string) => {
-      if (!showGrid) return;
-      ctx.save();
-      roundRect(ctx, cx, cy, cw, ch, radius);
-      ctx.clip();
-      drawGridLines(10, 'rgba(30, 41, 59, 0.5)', 0.5);
-      drawGridLines(50, color, 1);
-      ctx.restore();
+    const drawArrowhead = (tx: number, ty: number, angle: number, color: string) => {
+      const size = 32 * zoom;
+      ctx.save(); ctx.translate(tx, ty); ctx.rotate(angle);
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-size, -size / 1.5); ctx.lineTo(-size * 0.75, 0); ctx.lineTo(-size, size / 1.5);
+      ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.restore();
     };
 
-    if (!factory?.areas) return;
+    const drawPathWithArrow = (points: {x: number, y: number}[], color: string, isDashed: boolean, targetSize: {w: number, h: number}) => {
+      if (points.length < 2) return;
+      const last = points[points.length - 1]; const prev = points[points.length - 2];
+      const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
+      const cos = Math.abs(Math.cos(angle)); const sin = Math.abs(Math.sin(angle));
+      const dist = Math.min((targetSize.w / 2) / cos, (targetSize.h / 2) / sin);
+      const realLast = { x: last.x - dist * Math.cos(angle), y: last.y - dist * Math.sin(angle) };
+      ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length - 1; i++) { ctx.lineTo(points[i].x, points[i].y); }
+      ctx.lineTo(realLast.x, realLast.y);
+      ctx.strokeStyle = color; ctx.lineWidth = 4 * zoom;
+      if (isDashed) { ctx.setLineDash([16 * zoom, 12 * zoom]); ctx.lineDashOffset = -viewState.time * 35 * zoom; }
+      ctx.stroke(); ctx.setLineDash([]);
+      drawArrowhead(realLast.x, realLast.y, angle, color);
+    };
 
     factory.areas.forEach((area: any) => {
-      const x = area.x * zoom + panX;
-      const y = area.y * zoom + panY;
-      const w = area.width * zoom;
-      const h = area.height * zoom;
-
-      // Frustum cull
-      if (x > canvas.width || x + w < 0 || y > canvas.height || y + h < 0) return;
-
-      const isHovered = hoveredEntity?.type === 'area' && hoveredEntity.id === area.id;
-      const isSelected = selectedAreaId === area.id;
-
-      // Area shadow + fill
-      ctx.shadowColor = 'rgba(0,0,0,0.5)';
-      ctx.shadowBlur = 20;
-      ctx.shadowOffsetY = 10;
-      ctx.fillStyle = 'rgba(30, 41, 59, 0.4)';
-      roundRect(ctx, x, y, w, h, 12 * zoom);
-      ctx.fill();
-
-      // Reset shadow
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetY = 0;
-
-      drawGridClipped(12 * zoom, x, y, w, h, 'rgba(30, 41, 59, 0.9)');
-
-      // Reset shadow
-      ctx.shadowColor = 'transparent';
-      ctx.shadowBlur = 0;
-      ctx.shadowOffsetY = 0;
-
-      // Border
-      ctx.lineWidth = isHovered || isSelected ? 2 : 1;
-      ctx.strokeStyle = isSelected ? '#3f83f8' : isHovered ? '#60a5fa' : '#334155';
-      roundRect(ctx, x, y, w, h, 12 * zoom);
-      ctx.stroke();
-
-      // Header band
-      const headerH = 45 * zoom;
-      const r = 12 * zoom;
-      ctx.fillStyle = isSelected ? 'rgba(63, 131, 248, 0.15)' : isHovered ? 'rgba(96, 165, 250, 0.15)' : 'rgba(30, 41, 59, 0.8)';
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.lineTo(x + w - r, y);
-      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-      ctx.lineTo(x + w, y + headerH);
-      ctx.lineTo(x, y + headerH);
-      ctx.lineTo(x, y + r);
-      ctx.quadraticCurveTo(x, y, x + r, y);
-      ctx.fill();
-
-      // Area header separator line
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = isSelected ? '#3f83f8' : '#334155';
-      ctx.beginPath();
-      ctx.moveTo(x, y + headerH);
-      ctx.lineTo(x + w, y + headerH);
-      ctx.stroke();
-
-      // Area title
-      ctx.fillStyle = isSelected ? '#bfdbfe' : '#94a3b8';
-      ctx.font = `bold ${Math.max(10, 14 * zoom)}px Inter, sans-serif`;
-      ctx.fillText(area.areaName, x + 14 * zoom, y + 29 * zoom);
-
-      // Draw Flows (Escalators/Conveyors)
-      if (factory?.flows) {
-        factory.flows.forEach((flow: any) => {
-          let fromWC: any = null; let toWC: any = null;
-          factory.areas.forEach((a: any) => a.lines?.forEach((l: any) => l.workCenters?.forEach((w: any) => {
-            if (w.id === flow.fromWsId || w.workCenterId === flow.fromWsId) fromWC = w;
-            // Handle precision differences in CSV mapping e.g., "2" vs "2.0"
-            if (w.id === flow.toWsId || w.workCenterId === flow.toWsId || parseFloat(w.id || '0') === parseFloat(flow.toWsId || '-1')) toWC = w;
-          })));
-
-          if (fromWC && toWC) {
-            const fx = (fromWC.x + fromWC.width / 2) * zoom + panX;
-            const fy = (fromWC.y + fromWC.height / 2) * zoom + panY;
-            const tx = (toWC.x + toWC.width / 2) * zoom + panX;
-            const ty = (toWC.y + toWC.height / 2) * zoom + panY;
-
-            ctx.beginPath();
-            ctx.moveTo(fx, fy);
-            ctx.lineTo(tx, ty);
-            ctx.strokeStyle = '#f59e0b'; // Amber conveyor
-            ctx.lineWidth = 3.5 * zoom;
-            ctx.setLineDash([12 * zoom, 8 * zoom]);
-            ctx.lineDashOffset = -viewState.time * 25 * zoom;
-            ctx.stroke();
-            ctx.setLineDash([]);
-
-            // Arrow Head
-            const angle = Math.atan2(ty - fy, tx - fx);
-            const ptRadius = Math.max(toWC.width / 2, toWC.height / 2) * zoom + (5 * zoom);
-            const arrowX = tx - Math.cos(angle) * ptRadius;
-            const arrowY = ty - Math.sin(angle) * ptRadius;
-
-            ctx.beginPath();
-            ctx.moveTo(arrowX, arrowY);
-            ctx.lineTo(arrowX - 42 * zoom * Math.cos(angle - Math.PI / 6), arrowY - 42 * zoom * Math.sin(angle - Math.PI / 6));
-            ctx.lineTo(arrowX - 42 * zoom * Math.cos(angle + Math.PI / 6), arrowY - 42 * zoom * Math.sin(angle + Math.PI / 6));
-            ctx.fillStyle = '#f59e0b';
-            ctx.fill();
-
-            // Flow label
-            if (zoom > 0.8 && flow.label) {
-              ctx.fillStyle = '#b45309';
-              ctx.font = `600 ${Math.max(8, 10 * zoom)}px Inter, sans-serif`;
-              ctx.fillText(flow.label, (fx + tx) / 2, (fy + ty) / 2 - (10 * zoom));
-            }
-          }
-        });
-      }
-
-      // Draw Inter-Area Flows (Red arrows connecting last workstation of area N to first of area N+1)
-      const areaBoundaries = getAreaBoundaryWorkcenters(factory);
-      if (areaBoundaries.length > 1) {
-        for (let i = 0; i < areaBoundaries.length - 1; i++) {
-          const currentArea = areaBoundaries[i];
-          const nextArea = areaBoundaries[i + 1];
-
-          if (currentArea.last && nextArea.first) {
-            const fromWC = currentArea.last;
-            const toWC = nextArea.first;
-
-            const fromCX = (fromWC.x + fromWC.width / 2) * zoom + panX;
-            const fromCY = (fromWC.y + fromWC.height / 2) * zoom + panY;
-            const toCX = (toWC.x + toWC.width / 2) * zoom + panX;
-            const toCY = (toWC.y + toWC.height / 2) * zoom + panY;
-
-            let fx, fy, tx, ty;
-            let p1x, p1y, p2x, p2y;
-            let angle;
-
-            // Use horizontal routing only if it's primarily horizontal AND they are on the same vertical "row"
-            if (Math.abs(toCY - fromCY) < Math.abs(toCX - fromCX) && Math.abs(toCY - fromCY) < 400 * zoom) {
-              // Horizontal dominant routing (e.g. W9 -> W10)
-              if (toCX > fromCX) {
-                fx = (fromWC.x + fromWC.width) * zoom + panX; // Right
-                fy = fromCY;
-                tx = toWC.x * zoom + panX; // Left
-                ty = toCY;
-                angle = 0;
-              } else {
-                fx = fromWC.x * zoom + panX; // Left
-                fy = fromCY;
-                tx = (toWC.x + toWC.width) * zoom + panX; // Right
-                ty = toCY;
-                angle = Math.PI;
-              }
-              const cx = fx + (tx - fx) / 2;
-              p1x = cx; p1y = fy;
-              p2x = cx; p2y = ty;
-            } else {
-              // Vertical dominant routing (e.g. W18 -> W19)
-              const currentAreaBox = currentArea.area;
-              const areaBottomY = (currentAreaBox.y + currentAreaBox.height) * zoom + panY;
-
-              if (toCY > fromCY) {
-                fx = fromCX;
-                fy = (fromWC.y + fromWC.height) * zoom + panY; // Bottom
-                tx = toCX;
-                ty = toWC.y * zoom + panY; // Top
-                angle = Math.PI / 2;
-
-                // Route outside the box neatly
-                // Place the horizontal line halfway between the bottom of the area box and the target WC
-                const paddingBelowBox = 40 * zoom;
-                const minCy = areaBottomY + paddingBelowBox;
-                const defaultCy = fy + (ty - fy) / 2;
-                const cy = Math.max(defaultCy, minCy);
-
-                p1x = fx; p1y = cy;
-                p2x = tx; p2y = cy;
-              } else {
-                fx = fromCX;
-                fy = fromWC.y * zoom + panY; // Top
-                tx = toCX;
-                ty = (toWC.y + toWC.height) * zoom + panY; // Bottom
-                angle = -Math.PI / 2;
-
-                const cy = fy + (ty - fy) / 2;
-                p1x = fx; p1y = cy;
-                p2x = tx; p2y = cy;
-              }
-            }
-
-            ctx.beginPath();
-            ctx.moveTo(fx, fy);
-            ctx.lineTo(p1x, p1y);
-            ctx.lineTo(p2x, p2y);
-            ctx.lineTo(tx, ty);
-            ctx.strokeStyle = '#ef4444'; // Red for inter-area connections
-            ctx.lineWidth = 3.5 * zoom;
-            ctx.setLineDash([12 * zoom, 8 * zoom]);
-            ctx.lineDashOffset = -viewState.time * 25 * zoom;
-            ctx.stroke();
-            ctx.setLineDash([]);
-
-            // Red Arrow Head
-            const arrowX = tx;
-            const arrowY = ty; // Sharp connection
-
-            ctx.beginPath();
-            ctx.moveTo(arrowX, arrowY);
-            ctx.lineTo(arrowX - 52 * zoom * Math.cos(angle - Math.PI / 6), arrowY - 52 * zoom * Math.sin(angle - Math.PI / 6));
-            ctx.lineTo(arrowX - 52 * zoom * Math.cos(angle + Math.PI / 6), arrowY - 52 * zoom * Math.sin(angle + Math.PI / 6));
-            ctx.fillStyle = '#ef4444';
-            ctx.fill();
-          }
-        }
-      }
-
-      // Level of Detail — show details when zoomed in
-      const showDetails = true; // zoom > 0.5 || isSelected;
-
-      if (showDetails) {
-        area.lines?.forEach((line: any) => {
-          const lx = line.x * zoom + panX;
-          const ly = line.y * zoom + panY;
-          const lw = line.width * zoom;
-          const lh = line.height * zoom;
-
-          // Line container
-          ctx.fillStyle = 'rgba(30, 41, 59, 0)';
-          ctx.strokeStyle = 'transparent';
-          ctx.lineWidth = 0;
-          roundRect(ctx, lx, ly, lw, lh, 8 * zoom);
-          ctx.fill();
-
-          // Line name
-          if (zoom > 0.65) {
-            ctx.fillStyle = '#475569';
-            ctx.font = `${Math.max(8, 10 * zoom)}px Inter, sans-serif`;
-            ctx.fillText(line.lineName, lx + 8 * zoom, ly + 16 * zoom);
-          }
-
-          // Machines
-          line.workCenters?.forEach((wc: any) => {
-            const wx = wc.x * zoom + panX;
-            const wy = wc.y * zoom + panY;
-            const ww = wc.width * zoom;
-            const wh = wc.height * zoom;
-
-            const isMachineHovered = hoveredEntity?.type === 'machine' && hoveredEntity.id === wc.id;
-
-            const _rawId = (wc.id || wc.workCenterId || wc.ws_id || '').toLowerCase();
-            const wcIdKey = EXCEL_WORKSTATIONS[_rawId] ? _rawId : ('w' + _rawId.replace(/^w/, ''));
-            const excelData = EXCEL_WORKSTATIONS[wcIdKey];
-            const statusVal = (excelData?.status || wc.status || 'Running').toLowerCase();
-
-            let statusColor = '#10b981'; // Default Running
-            if (statusVal === 'idle') statusColor = '#f59e0b';
-            else if (statusVal === 'bottleneck') statusColor = '#f97316';
-            else if (statusVal === 'down') statusColor = '#f43f5e'; // Down
-            else if (statusVal === 'critical') statusColor = '#ef4444'; // Critical
-
-            // Machine box
-            ctx.fillStyle = isMachineHovered ? 'rgba(30, 41, 59, 0.95)' : 'rgba(15, 23, 42, 0.8)';
-            ctx.strokeStyle = isMachineHovered ? '#38bdf8' : statusColor;
-            ctx.lineWidth = isMachineHovered ? 2 : 1.5;
-            roundRect(ctx, wx, wy, ww, wh, 6 * zoom);
-            ctx.fill();
-
-            roundRect(ctx, wx, wy, ww, wh, 6 * zoom);
-            ctx.stroke();
-
-            // Status dot
-            ctx.fillStyle = statusColor;
-            ctx.beginPath();
-            ctx.arc(wx + 10 * zoom, wy + 10 * zoom, 3.5 * zoom, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Center graphic text (W1, W2...)
-            if (wc.name && activeFilterIds['ws_id']) {
-              const text = wc.name.toUpperCase();
-              ctx.fillStyle = '#f8fafc'; // solid white text
-              const fontSize = Math.max(8, 32 * zoom);
-              ctx.font = `bold ${fontSize}px Inter, sans-serif`;
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillText(text, wx + ww / 2, wy + wh / 2 - (20 * zoom));
-              ctx.textAlign = 'left';
-              ctx.textBaseline = 'alphabetic';
-            }
-
-            // Render Dynamic Parameters inside the box
-            if (zoom > 0.1) {
-              const _rawId = (wc.name || wc.id || wc.workCenterId || wc.ws_id || '').toLowerCase();
-              const wcIdKey = dynamicWorkstationData[_rawId] ? _rawId : (EXCEL_WORKSTATIONS[_rawId] ? _rawId : ('w' + _rawId.replace(/^w/, '')));
-              const excelData = dynamicWorkstationData[_rawId] || EXCEL_WORKSTATIONS[wcIdKey];
-
-              ctx.textAlign = 'center';
-              let offset = 15;
-
-              allFilters.forEach(filter => {
-                if (filter.id === 'ws_id') return; // Handled above
-
-                if (activeFilterIds[filter.id] && excelData?.[filter.id]) {
-                  const val = excelData[filter.id];
-                  ctx.fillStyle = filter.id === 'oee' ? '#10b981' : '#38bdf8';
-                  ctx.font = `600 ${Math.max(8, (filter.id === 'oee' ? 14 : 12) * zoom)}px Inter, sans-serif`;
-                  ctx.fillText(`${filter.label}: ${val}${filter.id === 'oee' ? '%' : ''}`, wx + ww / 2, wy + wh / 2 + (offset * zoom));
-                  offset += 20;
-                }
-              });
-              ctx.textAlign = 'left';
-            }
-          });
-        });
-      } else {
-        // Zoomed out summary
-        const totalMachines = area.lines?.reduce((s: number, l: any) => s + l.workCenters.length, 0) ?? 0;
-        ctx.fillStyle = '#64748b';
-        ctx.font = `${Math.max(8, 12 * zoom)}px Inter, sans-serif`;
-        ctx.fillText(`${area.lines?.length ?? 0} Production Lines`, x + 14 * zoom, y + 68 * zoom);
-        ctx.fillText(`${totalMachines} Machines`, x + 14 * zoom, y + 88 * zoom);
-      }
+      const ax = area.x * zoom + panX; const ay = area.y * zoom + panY;
+      const aw = area.width * zoom; const ah = area.height * zoom;
+      const isSelected = area.id === selectedAreaId;
+      ctx.fillStyle = isSelected ? 'rgba(148, 163, 184, 0.08)' : 'rgba(30, 41, 59, 0.4)';
+      roundRect(ctx, ax, ay, aw, ah, 12 * zoom); ctx.fill();
+      ctx.strokeStyle = isSelected ? '#94a3b8' : '#334155'; ctx.lineWidth = (isSelected ? 2 : 1.5) * zoom; 
+      roundRect(ctx, ax, ay, aw, ah, 12 * zoom); ctx.stroke();
+      ctx.fillStyle = isSelected ? '#f1f5f9' : '#64748b'; ctx.font = `bold ${Math.max(10, 16 * zoom)}px Inter`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(area.areaName.toUpperCase(), ax + 20 * zoom, ay + 20 * zoom);
     });
-  }, [factory, viewState, hoveredEntity, selectedAreaId, showGrid, activeFilterIds, dynamicWorkstationData, allFilters]);
 
-  const resetView = useCallback(() => {
-    setSelectedAreaId(null);
-    setViewState(prev => ({ ...prev, targetZoom: 0.35, targetPanX: 60, targetPanY: 60 }));
-  }, []);
-
-  const handleFitToScreen = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !factory) return;
-    const padding = 60;
-    const scaleX = (canvas.width - padding * 2) / factory.width;
-    const scaleY = (canvas.height - padding * 2) / factory.height;
-    const targetZoom = Math.max(0.35, Math.min(scaleX, scaleY, 2.0));
-
-    const contentWidth = factory.width * targetZoom;
-    const contentHeight = factory.height * targetZoom;
-
-    setViewState(prev => ({
-      ...prev,
-      targetZoom,
-      targetPanX: (canvas.width - contentWidth) / 2,
-      targetPanY: (canvas.height - contentHeight) / 2,
-    }));
-  }, [factory]);
-
-  // Fit to screen on initial load
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      handleFitToScreen();
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [factory, handleFitToScreen]);
-
-  // Canvas interactions
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const { zoom, panX, panY } = viewState;
-    const mx = ((e.clientX - rect.left) * scaleX - panX) / zoom;
-    const my = ((e.clientY - rect.top) * scaleY - panY) / zoom;
-
-    let foundMachine: { id: string, areaId: string, lineId: string } | null = null;
-    factory?.areas?.forEach((area: any) => {
+    factory.areas.forEach((area: any) => {
       area.lines?.forEach((line: any) => {
         line.workCenters?.forEach((wc: any) => {
-          if (mx >= wc.x && mx <= wc.x + wc.width && my >= wc.y && my <= wc.y + wc.height) {
-            foundMachine = { id: wc.id, areaId: area.id, lineId: line.id };
-          }
-        });
-      });
-    });
+          const wx = wc.x * zoom + panX; const wy = wc.y * zoom + panY;
+          const ww = wc.width * zoom; const wh = wc.height * zoom;
+          const isSelected = wc.id === selectedWcId;
+          const _id = (wc.id || '').toLowerCase();
+          // Smart ID Matching: Try direct ID, then try with 'w' prefix for SQL compatibility
+          const excelData = dynamicWorkstationData[_id] || 
+                            dynamicWorkstationData['w' + _id] || 
+                            wc.parameters || 
+                            EXCEL_WORKSTATIONS['w' + _id.replace(/^w/, '')];
+          
+          const status = (excelData?.status || 'Running').toLowerCase();
+          let color = '#10b981'; if (status === 'idle') color = '#f59e0b'; else if (status === 'down' || status === 'critical') color = '#ef4444';
+          ctx.fillStyle = isSelected ? 'rgba(56, 189, 248, 0.1)' : 'rgba(15, 23, 42, 0.98)';
+          ctx.strokeStyle = isSelected ? '#38bdf8' : color; ctx.lineWidth = (isSelected ? 4 : 3) * zoom;
+          roundRect(ctx, wx, wy, ww, wh, 8 * zoom); ctx.fill(); ctx.stroke();
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          if (activeFilterIds['ws_id']) { ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.max(12, 36 * zoom)}px Inter`; ctx.fillText(wc.name || '', wx + ww / 2, wy + wh / 2); }
+          
+          let yOff = 35;
+          availableParameters.forEach((param, pIdx) => {
+            if (activeFilterIds[param.id]) {
+              const val = excelData?.[param.id];
+              if (val !== undefined && val !== null) {
+                // Different colors for different rows to keep it readable
+                const colors = ['#10b981', '#38bdf8', '#fbbf24', '#f87171', '#a78bfa'];
+                ctx.fillStyle = colors[pIdx % colors.length];
+                ctx.font = `${pIdx === 0 ? 'bold' : '600'} ${Math.max(7, (pIdx === 0 ? 14 : 12) * zoom)}px Inter`;
+                
+                let displayVal = val;
+                if (param.id === 'oee') displayVal = `${val}% OEE`;
+                else if (param.id === 'orders') displayVal = `Orders: ${val}`;
+                else displayVal = `${param.label}: ${val}`;
 
-    if (foundMachine && !isAdmin && !readOnly) {
-      setDraggingMachine(foundMachine);
-      e.preventDefault();
-      return;
-    }
-
-    // Check for Area Header click
-    let foundAreaId: string | null = null;
-    factory?.areas?.forEach((area: any) => {
-        const headerH = 45;
-        if (mx >= area.x && mx <= area.x + area.width && my >= area.y && my <= area.y + headerH) {
-            foundAreaId = area.id;
-        }
-    });
-
-    if (foundAreaId && !isAdmin && !readOnly) {
-        setDraggingAreaId(foundAreaId);
-        const area = factory.areas.find((a: any) => a.id === foundAreaId);
-        dragOffsetRef.current = { x: mx - area.x, y: my - area.y };
-        setSelectedAreaId(foundAreaId);
-        e.preventDefault();
-        return;
-    }
-
-    isPanningRef.current = true;
-    hasDraggedRef.current = false;
-    panStartRef.current = {
-      x: e.clientX, y: e.clientY,
-      panX: viewState.targetPanX, panY: viewState.targetPanY,
-    };
-    e.preventDefault();
-  };
-
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    // Pan
-    if (isPanningRef.current && panStartRef.current) {
-      const dx = e.clientX - panStartRef.current.x;
-      const dy = e.clientY - panStartRef.current.y;
-      const startPanX = panStartRef.current.panX;
-      const startPanY = panStartRef.current.panY;
-
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) hasDraggedRef.current = true;
-      if (hasDraggedRef.current) {
-        setViewState(prev => ({
-          ...prev,
-          targetPanX: startPanX + dx,
-          targetPanY: startPanY + dy,
-        }));
-      }
-    }
-
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const { zoom, panX, panY } = viewState;
-    const mx = ((e.clientX - rect.left) * scaleX - panX) / zoom;
-    const my = ((e.clientY - rect.top) * scaleY - panY) / zoom;
-
-    // Handle Dragging
-    if (draggingMachine) {
-      updateFactory((prev: any) => {
-        const newFactory = { ...prev };
-        const area = newFactory.areas?.find((a: any) => a.id === draggingMachine.areaId);
-        if (!area) return prev;
-        const line = area.lines?.find((l: any) => l.id === draggingMachine.lineId);
-        if (!line) return prev;
-        const wc = line.workCenters?.find((w: any) => w.id === draggingMachine.id);
-        if (!wc) return prev;
-
-        const headerH = 45; // Area header
-        let newX = mx - wc.width / 2;
-        let newY = my - wc.height / 2;
-
-        // Clamp to area bounds
-        if (newX < area.x + 5) newX = area.x + 5;
-        if (newY < area.y + headerH) newY = area.y + headerH;
-        if (newX + wc.width > area.x + area.width - 5) newX = area.x + area.width - wc.width - 5;
-        if (newY + wc.height > area.y + area.height - 5) newY = area.y + area.height - wc.height - 5;
-
-        wc.x = newX;
-        wc.y = newY;
-
-        // Check collision with other workstations and push them
-        const oldX = wc.x;
-        const oldY = wc.y;
-        line.workCenters?.forEach((otherWc: any) => {
-          if (otherWc.id === wc.id) return;
-
-          // Check if rectangles overlap
-          const overlapX = newX < otherWc.x + otherWc.width && newX + wc.width > otherWc.x;
-          const overlapY = newY < otherWc.y + otherWc.height && newY + wc.height > otherWc.y;
-
-          if (overlapX && overlapY) {
-            // Determine push direction based on movement
-            const dx = newX - oldX;
-            const dy = newY - oldY;
-
-            if (Math.abs(dx) > Math.abs(dy)) {
-              // Horizontal push
-              if (dx > 0) {
-                // Moving right, push other right
-                otherWc.x = newX + wc.width + 5;
-              } else {
-                // Moving left, push other left
-                otherWc.x = newX - otherWc.width - 5;
+                ctx.fillText(displayVal.toString(), wx + ww / 2, wy + wh / 2 + yOff * zoom);
+                yOff += 20;
               }
-            } else {
-              // Vertical push
-              if (dy > 0) {
-                // Moving down, push other down
-                otherWc.y = newY + wc.height + 5;
-              } else {
-                // Moving up, push other up
-                otherWc.y = newY - otherWc.height - 5;
-              }
-            }
-
-            // Clamp the pushed workstation to area bounds
-            if (otherWc.x < area.x + 5) otherWc.x = area.x + 5;
-            if (otherWc.y < area.y + headerH) otherWc.y = area.y + headerH;
-            if (otherWc.x + otherWc.width > area.x + area.width - 5) {
-              otherWc.x = area.x + area.width - otherWc.width - 5;
-            }
-            if (otherWc.y + otherWc.height > area.y + area.height - 5) {
-              otherWc.y = area.y + area.height - otherWc.height - 5;
-            }
-          }
-        });
-
-        wc.x = newX;
-        wc.y = newY;
-        return newFactory;
-      });
-      return; // Skip hover updates while dragging
-    }
-
-    if (draggingAreaId && !isAdmin && !readOnly) {
-        updateFactory((prev: any) => {
-            const newFactory = { ...prev };
-            const area = newFactory.areas.find((a: any) => a.id === draggingAreaId);
-            if (!area) return prev;
-
-            const newX = Math.round(mx - dragOffsetRef.current.x);
-            const newY = Math.round(my - dragOffsetRef.current.y);
-            const dx = newX - area.x;
-            const dy = newY - area.y;
-
-            area.x = newX;
-            area.y = newY;
-
-            // Move lines and workstations
-            area.lines.forEach((l: any) => {
-                l.x += dx;
-                l.y += dy;
-                l.workCenters.forEach((w: any) => {
-                    w.x += dx;
-                    w.y += dy;
-                });
-            });
-
-            return newFactory;
-        });
-        return;
-    }
-
-    // Hover detection
-    let found: { type: 'area' | 'machine'; id: string } | null = null;
-    let newTooltip = null;
-
-    factory?.areas?.forEach((area: any) => {
-      if (mx >= area.x && mx <= area.x + area.width && my >= area.y && my <= area.y + area.height) {
-        found = { type: 'area', id: area.id };
-        // Hover detection for workstations works at ANY zoom level —
-        // mx/my are already in world-space so the hit test is zoom-independent.
-        area.lines?.forEach((line: any) => {
-          line.workCenters?.forEach((wc: any) => {
-            if (mx >= wc.x && mx <= wc.x + wc.width && my >= wc.y && my <= wc.y + wc.height) {
-              found = { type: 'machine', id: wc.id };
-              // Keep tooltip inside viewport: prefer right of cursor, flip left if near right edge
-              const tipX = e.clientX + 18;
-              const tipY = Math.max(10, e.clientY - 50);
-              newTooltip = { x: tipX, y: tipY, wc: wc, text: wc.detail };
             }
           });
         });
-      }
+      });
     });
 
-    // Explicit clear if no machine hovered
-    if (!found || (found as any).type !== 'machine') {
-      newTooltip = null;
-    }
-
-    setHoveredEntity(null); // Disable hover state highlight
-    setTooltipState(null); // Disable tooltip
-  };
-
-  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    setDraggingMachine(null);
-    setDraggingAreaId(null);
-    if (!hasDraggedRef.current) {
-      // It was a click — hit test
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect();
-        const scaleX = canvas.width / rect.width;
-        const scaleY = canvas.height / rect.height;
-        const { zoom, panX, panY } = viewState;
-        const mx = ((e.clientX - rect.left) * scaleX - panX) / zoom;
-        const my = ((e.clientY - rect.top) * scaleY - panY) / zoom;
-
-        let hitArea: any = null;
-        factory?.areas?.forEach((area: any) => {
-          if (mx >= area.x && mx <= area.x + area.width && my >= area.y && my <= area.y + area.height) {
-            hitArea = area;
-          }
-        });
-
-        if (!isAdmin && !readOnly) {
-          if (hitArea) {
-            setSelectedAreaId(hitArea.id === selectedAreaId ? null : hitArea.id);
-          } else {
-            setSelectedAreaId(null);
-          }
-        }
-      }
-    }
-    isPanningRef.current = false;
-    hasDraggedRef.current = false;
-    panStartRef.current = null;
-    setDraggingMachine(null);
-  };
-
-  const handleMouseLeave = () => {
-    isPanningRef.current = false;
-    hasDraggedRef.current = false;
-    panStartRef.current = null;
-    setHoveredEntity(null);
-    setTooltipState(null);
-    setDraggingMachine(null);
-  };
-
-  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const delta = e.deltaY > 0 ? -0.15 : 0.15;
-    const oldZoom = viewState.targetZoom;
-    const minZoom = 0.35; // Allow zooming out to see full layout
-    const newZoom = Math.max(minZoom, Math.min(3.0, oldZoom + delta));
-
-    // Zoom toward mouse position
-    const rect = canvas.getBoundingClientRect();
-    const cx = (e.clientX - rect.left) * (canvas.width / rect.width);
-    const cy = (e.clientY - rect.top) * (canvas.height / rect.height);
-
-    const factoryX = (cx - viewState.targetPanX) / oldZoom;
-    const factoryY = (cy - viewState.targetPanY) / oldZoom;
-
-    const newPanX = cx - factoryX * newZoom;
-    const newPanY = cy - factoryY * newZoom;
-
-    setViewState(prev => ({
-      ...prev,
-      targetZoom: newZoom,
-      targetPanX: newPanX,
-      targetPanY: newPanY
-    }));
-  };
-
-  const handleSave = () => {
-    localStorage.setItem('currentFactory', JSON.stringify(factory));
-    if (onSave) onSave(factory);
-    setSavedMsg(true);
-    setTimeout(() => setSavedMsg(false), 2500);
-  };
-
-  const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const csvContent = event.target?.result as string;
-      try {
-        const newLayout = parseCSV(csvContent);
-        updateFactory(newLayout);
-        
-        if (newLayout.areas.length > 0) {
-          const firstArea = newLayout.areas[0];
-          setViewState(prev => ({ 
-            ...prev, 
-            targetZoom: 0.6, 
-            targetPanX: -firstArea.x + 250, 
-            targetPanY: -firstArea.y + 150 
-          }));
-        }
-      } catch (err: any) {
-        alert(err.message);
-      }
-    };
-    reader.readAsText(file);
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleExportCSV = () => {
-    let csvData = "factory_id,factory_name,layout_id,layout_name,canvas_width,canvas_length,scale_ratio,layout_version_id,version_number,area_id,area_name,area_pos_x,area_pos_y,area_width,area_length,line_id,line_name,line_pos_x,line_pos_y,line_width,line_length,line_type,ws_id,ws_name,ws_sequence,ws_pos_x,ws_pos_y,ws_width,ws_length,machine_id,machine_name,machine_pos_x,machine_pos_y,machine_width,machine_length,flow_id,from_ws_id,to_ws_id,arrow_type,flow_label,detail\n";
-
-    if (!factory?.areas) return;
-
+    const areaEnds: any[] = [];
     factory.areas.forEach((area: any) => {
-      const line = area.lines?.[0];
-      if (!line) return;
-
-      line.workCenters?.forEach((wc: any, i: number) => {
-        const flow = factory.flows?.find((f: any) => f.fromWsId === wc.id);
-        const fId = flow ? flow.id : '';
-        const fTo = flow ? flow.toWsId : '';
-        const fType = flow ? flow.arrowType : '';
-        const fLabel = flow ? flow.label : '';
-
-        // scale coordinates down inversely by 2.5
-        const row = [
-          factory.id, factory.name, '202', 'Layout', '160', '100', '1', '1', '1',
-          area.id, area.areaName, area.x, area.y, area.width, area.height,
-          line.id, line.lineName, line.x, line.y, line.width, line.height, '',
-          wc.id, wc.name, i + 1,
-          wc.x / 2.5, wc.y / 2.5, wc.width / 6, wc.height / 6,
-          wc.workCenterId, wc.machineName, '', '', '', '',
-          fId, flow ? wc.id : '', fTo, fType, fLabel, wc.detail || ''
-        ];
-        csvData += row.map(v => typeof v === 'string' && v.includes(',') ? `"${v}"` : v).join(',') + '\n';
+      const areaWCs: any[] = [];
+      area.lines?.forEach((line: any) => {
+        line.workCenters?.forEach((wc: any, idx: number) => {
+          areaWCs.push(wc);
+          if (idx < line.workCenters.length - 1) {
+            const nextWc = line.workCenters[idx + 1];
+            const fx = (wc.x + wc.width / 2) * zoom + panX; const fy = (wc.y + wc.height / 2) * zoom + panY;
+            const tx = (nextWc.x + nextWc.width / 2) * zoom + panX; const ty = (nextWc.y + nextWc.height / 2) * zoom + panY;
+            drawPathWithArrow([{x: fx, y: fy}, {x: tx, y: ty}], '#f59e0b', true, {w: nextWc.width * zoom, h: nextWc.height * zoom});
+          }
+        });
       });
+      if (areaWCs.length > 0) { areaWCs.sort((a, b) => (a.wsSequence || 0) - (b.wsSequence || 0)); areaEnds.push({ area, first: areaWCs[0], last: areaWCs[areaWCs.length - 1] }); }
     });
 
-    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `exported_layout.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const applyAutoLayout = (areaId: string, type: string, manualWidth?: number, manualHeight?: number, clampToFit: boolean = false) => {
-    setAreaLayoutTypes(prev => ({ ...prev, [areaId]: type }));
-    updateFactory((prev: any) => {
-      const nf = { ...prev };
-      const area = nf.areas?.find((a: any) => a.id === areaId);
-      if (!area || !area.lines?.[0]) return prev;
-      const wcs = area.lines[0].workCenters;
-      if (!wcs || wcs.length === 0) return prev;
-
-      const N = wcs.length;
-      let maxX = 0; let maxY = 0;
-
-      if (type === 'Straight' || type === 'Straight Line') {
-        wcs.forEach((wc: any, i: number) => {
-          wc._cx = i; wc._cy = 0;
-          if (i > maxX) maxX = i;
-        });
-      } else if (type === 'L-Shape' || type === 'L-Type') {
-        const half = Math.ceil(N / 2);
-        wcs.forEach((wc: any, i: number) => {
-          if (i < half) { wc._cx = i; wc._cy = 0; }
-          else { wc._cx = half - 1; wc._cy = i - half + 1; }
-          if (wc._cx > maxX) maxX = wc._cx;
-          if (wc._cy > maxY) maxY = wc._cy;
-        });
-      } else if (type === 'U-Shape' || type === 'U-Type') {
-        const side = Math.max(1, Math.ceil(N / 3));
-        wcs.forEach((wc: any, i: number) => {
-          let cx = 0, cy = 0;
-          if (i < side) { cx = i; cy = 0; }
-          else if (i < side * 2) { cx = side - 1; cy = i - side + 1; }
-          else { cx = side - 2 - (i - side * 2); cy = side; }
-          wc._cx = cx; wc._cy = cy;
-        });
-        let minCx = 0;
-        wcs.forEach((wc: any) => { if (wc._cx < minCx) minCx = wc._cx; });
-        wcs.forEach((wc: any) => {
-          wc._cx -= minCx;
-          if (wc._cx > maxX) maxX = wc._cx;
-          if (wc._cy > maxY) maxY = wc._cy;
-        });
-      } else if (type === 'Inverted U-Shape' || type === 'Inverted U-Type') {
-        const side = Math.max(1, Math.ceil(N / 3));
-        wcs.forEach((wc: any, i: number) => {
-          let cx = 0, cy = 0;
-          if (i < side) { cx = 0; cy = side - 1 - i; }
-          else if (i < side * 2) { cx = i - side + 1; cy = 0; }
-          else { cx = side; cy = i - side * 2 + 1; }
-          wc._cx = cx; wc._cy = cy;
-          if (cx > maxX) maxX = cx;
-          if (cy > maxY) maxY = cy;
-        });
-      }
-
-      const targetWidth = manualWidth !== undefined ? manualWidth : area.width;
-      const targetHeight = manualHeight !== undefined ? manualHeight : area.height;
-
-      let minW = 0, minH = 0;
-      wcs.forEach((wc: any) => {
-        if (wc.width > minW) minW = wc.width;
-        if (wc.height > minH) minH = wc.height;
-      });
-
-      const startX = area.x + 80;
-      const startY = area.y + 120;
-      const usableWidth = Math.max(0, targetWidth - 160 - minW);
-      const usableHeight = Math.max(0, targetHeight - 160 - minH);
-
-      let spacingX = maxX > 0 ? usableWidth / maxX : 190;
-      let spacingY = maxY > 0 ? usableHeight / maxY : 190;
-
-      const minSpacingX = minW + 20;
-      const minSpacingY = minH + 20;
-
-      if (spacingX < minSpacingX) spacingX = minSpacingX;
-      if (spacingY < minSpacingY) spacingY = minSpacingY;
-
-      wcs.forEach((wc: any) => {
-        wc.x = startX + (wc._cx * spacingX);
-        wc.y = startY + (wc._cy * spacingY);
-        delete wc._cx; delete wc._cy;
-      });
-
-      if (clampToFit) {
-        if (spacingX === minSpacingX) {
-          area.width = Math.max(targetWidth, (maxX * spacingX) + 160 + minW);
-        } else {
-          area.width = targetWidth;
-        }
-
-        if (spacingY === minSpacingY) {
-          area.height = Math.max(targetHeight, (maxY * spacingY) + 160 + minH);
-        } else {
-          area.height = targetHeight;
-        }
+    for (let i = 0; i < areaEnds.length - 1; i++) {
+      const fromObj = areaEnds[i]; const toObj = areaEnds[i + 1];
+      const from = fromObj.last; const to = toObj.first;
+      if (!from || !to) continue;
+      
+      const fx = (from.x + from.width) * zoom + panX; const fy = (from.y + from.height / 2) * zoom + panY;
+      const tx = (to.x + to.width / 2) * zoom + panX; const ty = to.y * zoom + panY;
+      const path: {x: number, y: number}[] = [{x: fx, y: fy}];
+      
+      const isNewRow = to.y > fromObj.area.y + fromObj.area.height + 50;
+      if (isNewRow) {
+        const midY = (fromObj.area.y + fromObj.area.height + toObj.area.y) / 2 * zoom + panY;
+        path.push({x: fx + 40 * zoom, y: fy}); path.push({x: fx + 40 * zoom, y: midY}); path.push({x: tx, y: midY});
       } else {
-        area.width = targetWidth;
-        area.height = targetHeight;
+        const midX = fx + 40 * zoom; const midY = ty - 40 * zoom;
+        path.push({x: midX, y: fy}); path.push({x: midX, y: midY}); path.push({x: tx, y: midY});
       }
+      path.push({x: tx, y: ty});
+      drawPathWithArrow(path, '#ef4444', true, {w: to.width * zoom, h: 0});
+    }
+  }, [factory, viewState, showGrid, activeFilterIds, dynamicWorkstationData, selectedAreaId, selectedWcId, isAdmin, isPublicView]);
 
-      return nf;
-    });
+  const selectedArea = factory.areas.find((a: any) => a.id === (selectedAreaId || ''));
+  const selectedWc = factory.areas.flatMap((a: any) => a.lines.flatMap((l: any) => l.workCenters)).find((w: any) => w.id === (selectedWcId || ''));
+
+  const syncLocalInputs = useCallback(() => {
+    if (selectedWc) {
+      setLocalInputs({ x: Math.round(selectedWc.x).toString(), y: Math.round(selectedWc.y).toString(), width: Math.round(selectedWc.width).toString(), height: Math.round(selectedWc.height).toString(), ws_id: selectedWc.ws_id || selectedWc.name });
+    } else if (selectedArea) {
+      setLocalInputs({ x: Math.round(selectedArea.x).toString(), y: Math.round(selectedArea.y).toString(), width: Math.round(selectedArea.width).toString(), height: Math.round(selectedArea.height).toString(), lineType: selectedArea.lineType || 'Straight' });
+    }
+  }, [selectedWc, selectedArea]);
+
+  useEffect(() => { syncLocalInputs(); }, [selectedWcId, selectedAreaId]);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (isAdmin || readOnly || isPublicView) {
+      dragRef.current = { type: 'pan', id: '', startX: e.clientX, startY: e.clientY, itemStartX: viewState.panX, itemStartY: viewState.panY };
+      return;
+    }
+    const rect = canvasRef.current?.getBoundingClientRect(); if (!rect) return;
+    const mouseX = (e.clientX - rect.left - viewState.panX) / viewState.zoom;
+    const mouseY = (e.clientY - rect.top - viewState.panY) / viewState.zoom;
+    for (const area of factory.areas) {
+      for (const line of area.lines || []) {
+        for (const wc of line.workCenters || []) {
+          if (mouseX >= wc.x && mouseX <= wc.x + wc.width && mouseY >= wc.y && mouseY <= wc.y + wc.height) {
+            dragRef.current = { type: 'wc', id: wc.id, areaId: area.id, startX: e.clientX, startY: e.clientY, itemStartX: wc.x, itemStartY: wc.y };
+            setSelectedWcId(wc.id); setSelectedAreaId(area.id); return;
+          }
+        }
+      }
+    }
+    dragRef.current = { type: 'pan', id: '', startX: e.clientX, startY: e.clientY, itemStartX: viewState.panX, itemStartY: viewState.panY };
+    setSelectedWcId(null);
   };
 
-  const handleApprove = async () => {
-    if (!factory.id) return;
-    try {
-      await fetch(`/api/layouts/${factory.id}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reviewedBy: 'Admin' }),
-      });
-      window.location.href = '/admin';
-    } catch (err) {
-      console.error(err);
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!dragRef.current) return;
+    const { type, itemStartX, itemStartY, areaId, id } = dragRef.current;
+    const dx = (e.clientX - dragRef.current.startX) / (type === 'pan' ? 1 : viewState.zoom);
+    const dy = (e.clientY - dragRef.current.startY) / (type === 'pan' ? 1 : viewState.zoom);
+    if (type === 'pan') {
+      setViewState(p => ({ ...p, targetPanX: itemStartX + dx, targetPanY: itemStartY + dy }));
+    } else if (type === 'wc' && !isAdmin && !readOnly && !isPublicView) {
+      const newFactory = { ...factory };
+      const area = newFactory.areas.find((a: any) => a.id === areaId);
+      const wc = area?.lines[0].workCenters.find((w: any) => w.id === id);
+      if (wc && area) {
+        const targetX = itemStartX + dx; const targetY = itemStartY + dy;
+        let collision = false;
+        area.lines[0].workCenters.forEach((other: any) => { if (other.id !== id) { const pad = 20; if (targetX < other.x + other.width + pad && targetX + wc.width > other.x - pad && targetY < other.y + other.height + pad && targetY + wc.height > other.y - pad) collision = true; } });
+        if (!collision) { wc.x = Math.max(area.x, Math.min(area.x + area.width - wc.width, targetX)); wc.y = Math.max(area.y, Math.min(area.y + area.height - wc.height, targetY)); updateFactory(newFactory, false); }
+      }
     }
   };
 
-  const handleReject = async () => {
-    if (!factory.id) return;
+  const handleMouseUp = () => { if (dragRef.current && dragRef.current.type !== 'pan') { setHistory(prev => [...prev, factory]); syncLocalInputs(); } dragRef.current = null; };
+
+  const autoLayoutArea = (area: any, type: string) => {
+    const wcs = area.lines[0].workCenters; const startX = area.x + 80; const startY = area.y + 100; const step = 140;
+    if (type === 'Straight') { wcs.forEach((wc: any, i: number) => { wc.x = startX + i * step; wc.y = startY + 120; }); }
+    else if (type === 'L-Type') { const mid = Math.ceil(wcs.length / 2); wcs.forEach((wc: any, i: number) => { if (i < mid) { wc.x = startX; wc.y = startY + i * step; } else { wc.x = startX + (i - mid + 1) * step; wc.y = startY + (mid - 1) * step; } }); }
+    else if (type === 'U-Type') { const seg = Math.ceil(wcs.length / 3); wcs.forEach((wc: any, i: number) => { if (i < seg) { wc.x = startX; wc.y = startY + i * step; } else if (i < 2 * seg) { wc.x = startX + (i - seg + 1) * step; wc.y = startY + (seg - 1) * step; } else { wc.x = startX + (seg) * step; wc.y = startY + (seg - 1) * step - (i - 2 * seg + 1) * step; } }); }
+    else if (type === 'Inverted-U') { const seg = Math.ceil(wcs.length / 3); wcs.forEach((wc: any, i: number) => { if (i < seg) { wc.x = startX; wc.y = startY + (seg - 1) * step - i * step; } else if (i < 2 * seg) { wc.x = startX + (i - seg + 1) * step; wc.y = startY; } else { wc.x = startX + (seg) * step; wc.y = startY + (i - 2 * seg + 1) * step; } }); }
+  };
+
+  const updateSelectedItem = (key: string, rawVal: string) => {
+    if (isAdmin || readOnly || isPublicView) return;
+    setLocalInputs(p => ({ ...p, [key]: rawVal }));
+    const val = parseInt(rawVal); if (isNaN(val) && key !== 'ws_id' && key !== 'lineType') return;
+    const newFactory = { ...factory };
+    if (selectedWcId) { newFactory.areas.forEach((a: any) => a.lines.forEach((l: any) => l.workCenters.forEach((wc: any) => { if (wc.id === selectedWcId) { if (key === 'x') wc.x = Math.max(a.x, Math.min(a.x + a.width - wc.width, val)); else if (key === 'y') wc.y = Math.max(a.y, Math.min(a.y + a.height - wc.height, val)); else if (key === 'width') wc.width = Math.max(40, Math.min(val, a.x + a.width - wc.x)); else if (key === 'height') wc.height = Math.max(40, Math.min(val, a.y + a.height - wc.y)); else if (key === 'ws_id') wc.ws_id = rawVal; else wc[key] = val; } }))); }
+    else if (selectedAreaId) { const area = newFactory.areas.find((a: any) => a.id === selectedAreaId); if (area) { if (key === 'width' || key === 'height') { let minW = 200, minH = 200; area.lines.forEach((l: any) => l.workCenters.forEach((wc: any) => { minW = Math.max(minW, wc.x + wc.width - area.x + 20); minH = Math.max(minH, wc.y + wc.height - area.y + 20); })); if (key === 'width') area.width = Math.max(minW, val); if (key === 'height') area.height = Math.max(minH, val); } else if (key === 'x' || key === 'y') { const diff = val - (key === 'x' ? area.x : area.y); area[key] = val; area.lines.forEach((l: any) => l.workCenters.forEach((wc: any) => { if (key === 'x') wc.x += diff; else wc.y += diff; })); } else if (key === 'lineType') { area.lineType = rawVal; autoLayoutArea(area, rawVal); } else area[key] = val; } }
+    updateFactory(newFactory);
+  };
+
+  const handleReviewAction = async (action: 'approve' | 'reject' | 'push') => {
+    if (!layoutId) return alert("No Layout ID found for this session.");
     try {
-      await fetch(`/api/layouts/${factory.id}/reject`, {
+      const endpoint = action === 'push' ? 'comment' : action;
+      
+      // Determine if we should hit the local Next.js API or the SQL Backend
+      // Local drafts use UUIDs (with dashes), SQL Backend uses Integers
+      const isLocal = layoutId.toString().includes('-');
+      const baseUrl = isLocal ? '/api' : 'http://localhost:4000/api';
+      
+      const res = await fetch(`${baseUrl}/layouts/${layoutId}/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reviewedBy: 'Admin' }),
+        body: JSON.stringify({ 
+          admin_comments: adminComment, 
+          adminComments: adminComment, // Compatibility with local store
+          status: action === 'push' ? 'pushed' : (action === 'reject' ? 'rejected' : 'approved'),
+          reviewedBy: 'Admin',
+          reviewed_by: 'Admin'
+        })
       });
-      if (factory?.adminComments) {
-        await fetch(`/api/layouts/${factory.id}/comment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ adminComments: factory.adminComments, reviewedBy: 'Admin' }),
-        });
+
+      if (res.ok) {
+        let msg = "Action successful!";
+        if (action === 'push') msg = "Layout pushed back to developer with feedback!";
+        else if (action === 'approve') msg = "Layout officially approved!";
+        else if (action === 'reject') msg = "Layout rejected.";
+        
+        alert(msg);
+        window.location.href = '/admin';
+      } else {
+        alert("Server error. Could not complete the action.");
       }
-      window.location.href = '/admin';
     } catch (err) {
-      console.error(err);
+      alert("Network error. Please check your connection to the backend.");
     }
   };
 
-  const handleShareLayout = () => {
-    const activeIds = Object.entries(activeFilterIds)
-      .filter(([_, active]) => active)
-      .map(([id]) => id)
-      .join(',');
-
-    const baseUrl = window.location.origin + window.location.pathname;
-    const shareUrl = `${baseUrl}?id=${layoutId || factory.id || 'default-v1'}&filters=${activeIds}`;
-
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      setShareMsg(true);
-      setTimeout(() => setShareMsg(false), 2500);
-    });
-  };
-
-  const selectedArea = factory?.areas?.find((a: any) => a.id === selectedAreaId);
-
-  const renderTooltipNode = () => {
-    if (!tooltipState) return null;
-    const wc = tooltipState.wc || {};
-    const _rawTooltipId = (wc.id || wc.workCenterId || wc.ws_id || '').toLowerCase();
-    const wcIdKey = EXCEL_WORKSTATIONS[_rawTooltipId] ? _rawTooltipId : ('w' + _rawTooltipId.replace(/^w/, ''));
-    const excelData = EXCEL_WORKSTATIONS[wcIdKey];
-    const statusVal = (excelData?.status || wc.status || 'Running').toLowerCase();
-
-    let dotColor = 'bg-emerald-500 animate-pulse';
-    if (statusVal === 'idle') dotColor = 'bg-amber-500';
-    else if (statusVal === 'bottleneck') dotColor = 'bg-orange-500';
-    else if (statusVal === 'down') dotColor = 'bg-rose-500';
-    else if (statusVal === 'critical') dotColor = 'bg-red-600 animate-ping';
-
-    const TIP_W = 270;
-    const TIP_H = 420;
-    const vw = typeof window !== 'undefined' ? window.innerWidth : 1200;
-    const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
-    const tipLeft = tooltipState.x + TIP_W > vw - 10 ? tooltipState.x - TIP_W - 18 : tooltipState.x;
-    const tipTop = Math.min(tooltipState.y, vh - TIP_H - 10);
-
+  if (isAdmin || readOnly || isPublicView) {
     return (
-      <div className="fixed z-50 pointer-events-none p-4 text-xs text-slate-200 bg-[#0f172a]/95 backdrop-blur-md border border-[#1e293b] rounded-2xl shadow-2xl max-w-xs transition-opacity duration-150 flex flex-col gap-2.5 min-w-[240px]" style={{ left: tipLeft, top: Math.max(10, tipTop) }}>
-        <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
-          <div className={`h-2.5 w-2.5 rounded-full ${dotColor}`} />
-          <span className="font-bold text-white tracking-wide uppercase text-[10px]">Workstation Telemetry</span>
-        </div>
-        <div className="space-y-2.5">
-          {allFilters.map(filter => {
-            if (!activeFilterIds[filter.id]) return null;
-            let val = '';
-            if (filter.id === 'ws_id') val = excelData?.ws_id || wc.ws_id || wc.id || wc.workCenterId;
-            else if (filter.id === 'oee') val = excelData?.oee ? `${excelData.oee}%` : (wc.oee || '');
-            else if (filter.id === 'orders') val = excelData?.orders || wc.orders || '';
-
-            if (!val) return null;
-
-            return (
-              <div key={`tooltip-item-${filter.id}`} className="flex flex-col">
-                <span className="text-[9px] uppercase font-bold tracking-wider text-slate-400">{filter.label}</span>
-                <span className="text-xs font-semibold text-slate-200 mt-0.5 whitespace-pre-wrap">{val}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  };
-
-
-  if (isAdmin || readOnly) {
-    return (
-      <div className="flex flex-1 flex-col relative bg-[#0b1120] overflow-hidden w-full h-full font-sans">
-        {/* Canvas Container */}
+      <div className="flex flex-1 flex-col relative bg-[#060b14] overflow-hidden w-full h-full font-sans">
         <div ref={containerRef} className="flex-1 overflow-hidden z-10 flex items-center justify-center">
-          <canvas
-            ref={canvasRef}
-            className="block cursor-grab active:cursor-grabbing w-full h-full"
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseLeave}
-            onWheel={handleWheel}
-            onContextMenu={e => e.preventDefault()}
-          />
+          <canvas ref={canvasRef} className="block cursor-grab active:cursor-grabbing w-full h-full" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={e => setViewState(p => ({ ...p, targetZoom: Math.max(0.35, Math.min(3, p.targetZoom * (e.deltaY > 0 ? 0.9 : 1.1))) }))} />
         </div>
-
-        {/* Display Parameters Panel (Admin/View Overlay) */}
-        {allFilters.length > 0 && (
-          <div className="absolute top-[80px] left-4 z-20 w-[280px] bg-[#0f172a]/95 backdrop-blur-md border border-[#1e293b] rounded-xl shadow-2xl p-4">
-            <h3 className="text-[11px] font-bold text-slate-300 uppercase tracking-wide mb-2.5 flex items-center gap-2">
-              <LayoutGrid className="h-3.5 w-3.5 text-indigo-400" /> Display Parameters
-            </h3>
-            <p className="text-[10px] text-slate-400 mb-3 leading-relaxed">Toggle parameters below to customize the workstation display.</p>
-            <div className="space-y-2 max-h-[40vh] overflow-y-auto custom-scrollbar pr-1">
-              {allFilters.map(filter => (
-                <label key={`admin-filter-${filter.id}`} className="flex items-start gap-2.5 p-1.5 hover:bg-[#1e293b]/50 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-[#334155]">
-                  <input
-                    type="checkbox"
-                    checked={activeFilterIds[filter.id] ?? false}
-                    onChange={() => {
-                      setActiveFilterIds(prev => ({ ...prev, [filter.id]: !prev[filter.id] }));
-                    }}
-                    className="mt-0.5 h-3.5 w-3.5 rounded border-[#334155] bg-[#0f172a] text-indigo-500 focus:ring-indigo-500/50 accent-indigo-500 cursor-pointer"
-                  />
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] font-semibold text-slate-200 leading-none">{filter.label}</span>
-                    <span className="text-[9px] text-slate-400 font-medium leading-normal">{filter.description}</span>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Buttons overlay */}
-
-        {/* Download Image Button Top Right */}
-        <div className="absolute top-4 right-4 z-20 flex gap-3">
-          <Button onClick={handleShareLayout} className="bg-[#1e293b] hover:bg-[#334155] text-white border border-[#334155] shadow-lg rounded-xl h-10 px-4 transition-all">
-            <Upload className="mr-2 h-4 w-4 rotate-45" /> {shareMsg ? 'Link Copied ✓' : 'Share Layout URL'}
-          </Button>
-          <Button onClick={() => {
-            const a = document.createElement('a');
-            a.href = '/factory_layout_base.csv';
-            a.download = 'factory_layout_base.csv';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-          }} className="bg-[#1e293b] hover:bg-[#334155] text-white border border-[#334155] shadow-lg rounded-xl h-10 px-4">
-            <Download className="mr-2 h-4 w-4" /> Download Base CSV
-          </Button>
-        </div>
-
-        {/* Top Left Controls & Info */}
-        <div className="absolute top-4 left-4 z-20 flex items-center gap-6">
-          {!readOnly && (
-            <Button onClick={() => window.location.href = '/admin'} className="bg-[#1e293b] hover:bg-[#334155] text-white border border-[#334155] shadow-lg rounded-xl h-10 px-4">
-              <ArrowLeft className="mr-2 h-4 w-4" /> Back to Console
-            </Button>
-          )}
-          {!readOnly && <div className="h-6 w-px bg-[#334155]"></div>}
-          <div>
-            <h2 className="text-white font-bold text-lg tracking-wide">{factory?.name || 'Layout Blueprint'}</h2>
-            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">{readOnly ? 'View Only' : 'Admin Review Mode'}</p>
+        <div className="absolute top-[380px] left-8 z-20 w-[240px] flex flex-col gap-5 bg-[#0f172a]/95 backdrop-blur-md border border-[#1e293b] rounded-2xl shadow-2xl p-6">
+          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-800 pb-3 mb-1">Architectural Legend</h3>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-4 text-slate-300 text-[10px] font-black uppercase tracking-widest group cursor-default"><div className="w-8 h-4 border-2 border-[#10b981] rounded-sm group-hover:scale-110 transition-transform"></div><span>Workstation</span></div>
+            <div className="flex items-center gap-4 text-slate-300 text-[10px] font-black uppercase tracking-widest group cursor-default"><div className="w-8 h-0.5 border-t-2 border-dashed border-[#f59e0b] group-hover:translate-x-1 transition-transform"></div><span className="text-[#f59e0b]">Internal Flow</span></div>
+            <div className="flex items-center gap-4 text-slate-300 text-[10px] font-black uppercase tracking-widest group cursor-default"><div className="w-8 h-0.5 border-t-2 border-dashed border-[#ef4444] group-hover:translate-x-1 transition-transform"></div><span className="text-[#ef4444]">Outer Flow</span></div>
+            <div className="flex items-center gap-4 text-slate-300 text-[10px] font-black uppercase tracking-widest group cursor-default"><div className="w-8 h-4 border-2 border-dashed border-slate-700 rounded-sm group-hover:scale-110 transition-transform"></div><span>Area Bound</span></div>
           </div>
         </div>
-
-        {/* Floating Zoom Controls */}
-        <div className="absolute bottom-6 right-6 z-20 flex flex-col gap-2">
-          <Button
-            onClick={() => {
-              const oldZoom = viewState.targetZoom;
-              const newZoom = Math.min(3.0, oldZoom + 0.3);
-              setViewState(prev => ({ ...prev, targetZoom: newZoom }));
-            }}
-            className="bg-[#1e293b] hover:bg-[#334155] text-white border border-[#334155] shadow-lg rounded-xl h-10 w-10 p-0"
-            title="Zoom In"
-          >
-            <ZoomIn className="h-5 w-5" />
-          </Button>
-          <Button
-            onClick={() => {
-              const oldZoom = viewState.targetZoom;
-              const newZoom = Math.max(0.35, oldZoom - 0.3);
-              setViewState(prev => ({ ...prev, targetZoom: newZoom }));
-            }}
-            className="bg-[#1e293b] hover:bg-[#334155] text-white border border-[#334155] shadow-lg rounded-xl h-10 w-10 p-0"
-            title="Zoom Out"
-          >
-            <ZoomOut className="h-5 w-5" />
-          </Button>
-          <Button
-            onClick={handleFitToScreen}
-            className="bg-[#1e293b] hover:bg-[#334155] text-white border border-[#334155] shadow-lg rounded-xl h-10 w-10 p-0"
-            title="Reset View"
-          >
-            <Maximize2 className="h-5 w-5" />
-          </Button>
-          
-          {!isAdmin && (
-            <>
-              <div className="h-px bg-[#334155] my-1"></div>
-              <Button
-                onClick={undo}
-                disabled={history.length === 0}
-                className="bg-[#1e293b] hover:bg-[#334155] text-white border border-[#334155] shadow-lg rounded-xl h-10 w-10 p-0 disabled:opacity-30"
-                title="Undo (Ctrl+Z)"
-              >
-                <RotateCcw className="h-4 w-4" />
-              </Button>
-              <Button
-                onClick={redo}
-                disabled={future.length === 0}
-                className="bg-[#1e293b] hover:bg-[#334155] text-white border border-[#334155] shadow-lg rounded-xl h-10 w-10 p-0 disabled:opacity-30"
-                title="Redo (Ctrl+Y)"
-              >
-                <RotateCcw className="h-4 w-4 scale-x-[-1]" />
-              </Button>
-            </>
-          )}
+        <div className="absolute top-[110px] left-8 z-20 w-[280px] bg-[#0f172a]/95 backdrop-blur-md border border-[#1e293b] rounded-2xl shadow-2xl p-6">
+          <h3 className="text-[11px] font-bold text-slate-300 uppercase tracking-widest mb-5 flex items-center gap-2"><LayoutGrid className="h-4 w-4 text-indigo-400" /> Display Parameters</h3>
+          <div className="space-y-4">{allFilters.map(f => (<label key={f.id} className="flex items-start gap-4 p-2 hover:bg-[#1e293b]/50 rounded-xl cursor-pointer transition-colors group"><input type="checkbox" checked={activeFilterIds[f.id]} onChange={() => setActiveFilterIds(p => ({ ...p, [f.id]: !p[f.id] }))} className="mt-0.5 h-4.5 w-4.5 accent-indigo-500 rounded border-slate-700 bg-slate-900" /><div className="flex flex-col gap-0.5"><span className="text-[12px] font-bold text-slate-200 group-hover:text-white">{f.label}</span><span className="text-[10px] text-slate-500">{f.description}</span></div></label>))}</div>
         </div>
-
-        {/* Legend */}
-        <div className="absolute bottom-[140px] left-1/2 -translate-x-1/2 z-20 flex items-center gap-8 bg-[#0f172a] border border-[#1e293b] px-8 py-4 rounded-xl shadow-2xl">
-          <div className="flex items-center gap-3 text-slate-300 text-sm font-medium">
-            <div className="w-5 h-3 border border-[#10b981] rounded-sm"></div> Workstation
-          </div>
-          <div className="flex items-center gap-3 text-slate-300 text-sm font-medium">
-            <div className="w-6 border-t border-dashed border-[#f59e0b] relative">
-              <div className="absolute -right-1 -top-[3px] w-0 h-0 border-t-[3px] border-t-transparent border-b-[3px] border-b-transparent border-l-[4px] border-l-[#f59e0b]"></div>
-            </div>
-            Internal Escalator
-          </div>
-          <div className="flex items-center gap-3 text-slate-300 text-sm font-medium">
-            <div className="w-6 border-t border-dashed border-[#ef4444] relative">
-              <div className="absolute -right-1 -top-[3px] w-0 h-0 border-t-[3px] border-t-transparent border-b-[3px] border-b-transparent border-l-[4px] border-l-[#ef4444]"></div>
-            </div>
-            Outer Escalator
-          </div>
-          <div className="flex items-center gap-3 text-slate-300 text-sm font-medium">
-            <div className="w-6 h-3 border border-dashed border-slate-500 rounded-sm"></div> Area
-          </div>
+        <div className="absolute top-0 left-0 right-0 z-20 flex justify-between p-8 bg-gradient-to-b from-[#060b14] via-[#060b14]/80 to-transparent">
+          <div className="flex items-center gap-8"><Button onClick={() => window.location.href = isPublicView ? '/' : '/admin'} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155] transition-all active:scale-95"><ArrowLeft className="mr-3 h-5 w-5" /> {isPublicView ? 'Exit View' : 'Back to Console'}</Button><div className="h-10 w-px bg-slate-800"></div><div><h2 className="text-white font-bold text-2xl tracking-tight mb-1">{factory?.name || 'Blueprint Reviewer'}</h2><p className="text-indigo-400 text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-2"><CheckCircle2 className="h-3 w-3" /> {isPublicView ? 'Public Shared View' : 'Mandatory Review Mode (View Only)'}</p></div></div>
+          <div className="flex gap-4"><Button onClick={() => navigator.clipboard.writeText(getShareUrl()).then(() => setShareMsg(true))} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155]">{shareMsg ? 'Link Copied ✓' : 'Share URL'}</Button><Button onClick={() => window.print()} className="bg-indigo-600 text-white rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-indigo-700 transition-all">Download Blueprint</Button></div>
         </div>
-
-        {/* Comment Panel - Hidden for readOnly */}
-        {!readOnly && (
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-4xl z-20 flex flex-col gap-3 bg-[#0f172a] border border-[#1e293b] px-6 py-5 rounded-2xl shadow-2xl">
-            <h3 className="text-white text-sm font-bold tracking-wide">Add Comments</h3>
-            <div className="flex gap-4 items-center">
-              <input
-                type="text"
-                value={factory?.adminComments || ''}
-                onChange={e => setFactory((prev: any) => ({ ...prev, adminComments: e.target.value }))}
-                className="flex-1 bg-[#0b1120] border border-[#334155] rounded-xl px-4 py-3 text-sm text-slate-200 outline-none focus:border-[#64748b] shadow-inner transition-colors"
-                placeholder="Write your comments here..."
-              />
-              <Button onClick={handleApprove} className="bg-[#10b981] hover:bg-[#059669] text-white px-6 h-11 rounded-xl font-medium shadow-lg">
-                <Check className="mr-2 h-5 w-5" /> Approve
-              </Button>
-              <Button onClick={handleReject} className="bg-[#ef4444] hover:bg-[#dc2626] text-white px-6 h-11 rounded-xl font-medium shadow-lg">
-                <X className="mr-2 h-5 w-5" /> Disapprove
-              </Button>
-            </div>
+        {!isPublicView && isAdmin && (
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-full max-w-5xl z-20 flex flex-col gap-5 bg-[#0f172a]/98 backdrop-blur-xl border border-[#1e293b] p-8 rounded-3xl shadow-2xl ring-1 ring-white/5">
+            <div className="flex justify-between items-center px-1"><h3 className="text-white text-xs font-black uppercase tracking-widest flex items-center gap-2"><MessageSquare className="h-4 w-4 text-indigo-400" /> Reviewer Feedback</h3><div className="flex gap-2 items-center text-[10px] text-slate-500 font-bold uppercase tracking-widest"><div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></div> Secure Session</div></div>
+            <div className="flex gap-4 items-center"><input type="text" value={adminComment} onChange={e => setAdminComment(e.target.value)} className="flex-1 bg-[#0b1120] border border-[#1e293b] rounded-2xl px-6 py-5 text-sm text-slate-200 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-slate-600" placeholder="Type your detailed architectural feedback here..." /><Button onClick={() => handleReviewAction('push')} className="bg-[#3f83f8] hover:bg-[#2563eb] text-white px-8 h-16 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 transition-all active:scale-95 flex items-center gap-2"><Send className="h-4 w-4" /> Push to Dev</Button><Button onClick={() => handleReviewAction('approve')} className="bg-[#10b981] hover:bg-[#059669] text-white px-8 h-16 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 transition-all active:scale-95">Approve</Button><Button onClick={() => handleReviewAction('reject')} className="bg-[#ef4444] hover:bg-[#dc2626] text-white px-8 h-16 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-rose-500/20 transition-all active:scale-95">Reject</Button></div>
           </div>
         )}
       </div>
@@ -1512,394 +513,85 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   }
 
   return (
-    <div className="flex h-full w-full flex-col bg-slate-50">
-      {/* Toolbar — matches dashboard toolbar style */}
-      <div className="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-2 shadow-sm z-30 flex-wrap">
-        <div className="flex items-center gap-2">
-          {selectedArea ? (
-            <Button variant="outline" size="sm" onClick={resetView} className="gap-2 text-slate-700 border-slate-200">
-              <ArrowLeft className="h-4 w-4" /> Back to Overview
-            </Button>
-          ) : (
-            <span className="text-sm font-semibold text-slate-700 px-1">Factory Layout Editor</span>
-          )}
-        </div>
-
-        <div className="h-6 w-px bg-slate-200 mx-1" />
-
-        <input type="file" ref={fileInputRef} accept=".csv" className="hidden" onChange={handleCSVUpload} />
-        <Button onClick={() => fileInputRef.current?.click()} variant="outline" size="sm" className="border-slate-200 text-indigo-600 border-indigo-200 bg-indigo-50 hover:bg-indigo-100" title="Upload Layout CSV">
-          <Upload className="h-4 w-4 mr-1.5" /> Upload CSV
-        </Button>
-
-        <div className="h-6 w-px bg-slate-200 mx-1" />
-
-        <Button
-          onClick={() => setViewState(prev => ({ ...prev, targetZoom: Math.min(3, prev.targetZoom * 1.2) }))}
-          variant="outline" size="sm" className="border-slate-200" title="Zoom in"
-        >
-          <ZoomIn className="h-4 w-4" />
-        </Button>
-
-        <span className="text-xs text-slate-500 font-mono w-10 text-center">
-          {Math.round(viewState.zoom * 100)}%
-        </span>
-
-        <Button
-          onClick={() => setViewState(prev => ({ ...prev, targetZoom: Math.max(0.1, prev.targetZoom / 1.2) }))}
-          variant="outline" size="sm" className="border-slate-200" title="Zoom out"
-        >
-          <ZoomOut className="h-4 w-4" />
-        </Button>
-
-        <div className="h-6 w-px bg-slate-200 mx-1" />
-
-        <Button onClick={handleFitToScreen} variant="outline" size="sm" className="border-slate-200" title="Fit to screen">
-          <Maximize2 className="h-4 w-4" />
-        </Button>
-
-        <Button onClick={resetView} variant="outline" size="sm" className="border-slate-200" title="Reset view">
-          <RotateCcw className="h-4 w-4" />
-        </Button>
-
-        <div className="h-6 w-px bg-slate-200 mx-1" />
-
-        <Button
-          onClick={() => setShowGrid(!showGrid)}
-          variant={showGrid ? 'default' : 'outline'}
-          size="sm"
-          className={showGrid ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'border-slate-200'}
-          title="Toggle grid"
-        >
-          <Grid3x3 className="h-4 w-4 mr-1" /> Grid
-        </Button>
-
-        <div className="ml-auto" />
-
-        <Button
-          onClick={handleSave}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white"
-          size="sm"
-        >
-          <Save className="mr-2 h-4 w-4" />
-          {savedMsg ? 'Saved ✓' : 'Save Layout'}
-        </Button>
+    <div className="flex h-full w-full flex-col bg-[#f8fafc] font-sans">
+      <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center gap-4 shadow-sm z-30">
+        <div className="flex items-center gap-3"><LayoutGrid className="h-6 w-6 text-slate-700" /><span className="text-lg font-black text-slate-800 uppercase tracking-tighter">Layout Editor</span></div>
+        <div className="h-6 w-px bg-slate-200 mx-2"></div><span className="text-sm font-bold text-slate-500">{factory?.name}</span><div className="flex-1" /><Button onClick={() => { if (onSave) onSave(factory); setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2000); }} className="bg-slate-800 hover:bg-slate-900 text-white font-bold h-11 px-8 rounded-xl shadow-lg shadow-slate-100"><Save className="h-4 w-4 mr-2" /> {savedMsg ? 'Layout Saved!' : 'Save Layout'}</Button>
       </div>
 
-      {/* Main content area */}
+      <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 flex items-center gap-3 z-30">
+        <Button onClick={() => window.location.href = '/developer'} variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white"><ArrowLeft className="h-4 w-4 mr-2" /> Back to Overview</Button>
+        <div className="h-6 w-px bg-slate-200 mx-2"></div>
+        <Button variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white"><Upload className="h-4 w-4 mr-2" /> Upload CSV</Button>
+        <Button onClick={downloadCSV} variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white"><Download className="h-4 w-4 mr-2" /> Download CSV</Button>
+        <div className="flex-1" />
+        <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+          <Button onClick={() => setViewState(p => ({ ...p, targetZoom: Math.max(0.35, p.targetZoom / 1.2) }))} variant="ghost" size="icon" className="h-9 w-9 text-slate-500"><ZoomOut className="h-4 w-4" /></Button><div className="flex items-center px-3 text-[11px] font-bold text-slate-400 min-w-[50px] justify-center">{Math.round(viewState.zoom * 100)}%</div><Button onClick={() => setViewState(p => ({ ...p, targetZoom: Math.min(3, p.targetZoom * 1.2) }))} variant="ghost" size="icon" className="h-9 w-9 text-slate-500"><ZoomIn className="h-4 w-4" /></Button>
+        </div>
+        <Button onClick={handleFitToScreen} variant="outline" size="icon" className="h-11 w-11 rounded-xl border-slate-200 text-slate-500 shadow-sm hover:bg-white"><Maximize2 className="h-4 w-4" /></Button>
+        <Button onClick={() => updateFactory(history[history.length-1])} disabled={history.length === 0} variant="outline" size="icon" className="h-11 w-11 rounded-xl border-slate-200 text-slate-500 shadow-sm hover:bg-white"><RotateCcw className="h-4 w-4" /></Button>
+        <Button onClick={() => setShowGrid(!showGrid)} variant={showGrid ? "default" : "outline"} className={`rounded-xl font-bold h-11 ${showGrid ? 'bg-slate-800' : 'border-slate-200 text-slate-500 hover:bg-white'}`}><Grid3x3 className="h-4 w-4 mr-2" /> Grid</Button>
+      </div>
+
       <div className="flex flex-1 overflow-hidden relative">
-
-        {/* Left Side Panel - Structure Inspector & Filters */}
-        <div className="w-[340px] h-full bg-white border-r border-slate-200 flex flex-col z-20 shadow-[4px_0_15px_rgba(0,0,0,0.02)] relative">
-          {/* Header */}
-          <div className="px-5 py-4 border-b border-slate-100 bg-white/50 backdrop-blur-sm sticky top-0 z-10 flex items-center justify-between">
-            <h2 className="text-slate-900 text-[15px] font-bold tracking-tight flex items-center gap-2">
-              <LayoutGrid className="h-4 w-4 text-indigo-500" /> Structure Inspector
-            </h2>
-            {!isAdmin && <span className="text-[9px] font-bold tracking-wider bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full uppercase">Editor</span>}
-          </div>
-
-          {/* Display Parameters Section */}
-          <div className="p-5 border-b border-slate-100 bg-slate-50/30">
-            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Display Options</h3>
-            <div className="space-y-1.5">
-              {allFilters.map(filter => (
-                <div
-                  key={filter.id}
-                  onClick={() => setActiveFilterIds(prev => ({ ...prev, [filter.id]: !prev[filter.id] }))}
-                  className={`flex items-center justify-between p-2 rounded-xl cursor-pointer transition-all border ${activeFilterIds[filter.id]
-                    ? 'bg-white border-indigo-100 shadow-sm'
-                    : 'bg-transparent border-transparent hover:bg-slate-100'
-                    }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${activeFilterIds[filter.id] ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'
-                      }`}>
-                      {filter.id === 'ws_id' && <LayoutGrid className="h-3.5 w-3.5" />}
-                      {filter.id === 'oee' && <Check className="h-3.5 w-3.5" />}
-                      {filter.id === 'orders' && <MessageSquare className="h-3.5 w-3.5" />}
-                      {!['ws_id', 'oee', 'orders'].includes(filter.id) && <Activity className="h-3.5 w-3.5" />}
-                    </div>
-                    <div>
-                      <div className={`text-[11px] font-bold ${activeFilterIds[filter.id] ? 'text-slate-900' : 'text-slate-500'}`}>{filter.label}</div>
-                    </div>
-                  </div>
-                  <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${activeFilterIds[filter.id] ? 'bg-indigo-500 border-indigo-500' : 'bg-white border-slate-200'
-                    }`}>
-                    {activeFilterIds[filter.id] && <Check className="h-2 w-2 text-white stroke-[3]" />}
-                  </div>
+        <div className="w-[320px] bg-white border-r border-slate-200 flex flex-col z-20 shadow-sm overflow-y-auto">
+          <div className="p-6 space-y-8">
+            <div>
+              <div className="flex items-center justify-between mb-4"><h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><LayoutGrid className="h-4 w-4 text-slate-600" /> Structure Inspector</h3><span className="text-[9px] font-bold px-2 py-1 bg-slate-100 text-slate-600 rounded-full border border-slate-200 uppercase">Editor</span></div>
+              <div className="space-y-6">
+                <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" /><input type="text" placeholder="Search areas or units..." className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 text-sm outline-none focus:border-slate-400 transition-all" /></div>
+                <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 space-y-3">
+                  <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Display Options</h4>
+                  <div className="space-y-3">{allFilters.map(f => (<label key={f.id} className="flex items-center gap-3 cursor-pointer group"><input type="checkbox" checked={activeFilterIds[f.id]} onChange={() => setActiveFilterIds(p => ({ ...p, [f.id]: !p[f.id] }))} className="h-4 w-4 accent-slate-900 rounded border-slate-300" /><span className="text-[11px] font-bold text-slate-600 group-hover:text-slate-900 transition-colors">{f.label}</span></label>))}</div>
                 </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Search */}
-          <div className="p-4 border-b border-slate-100">
-            <div className="relative group">
-              <AlignJustify className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-              <input
-                type="text"
-                placeholder="Search areas or units..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pl-9 pr-4 text-sm outline-none focus:border-indigo-400 focus:bg-white transition-all shadow-sm"
-              />
-            </div>
-          </div>
-
-          {/* Areas & Workstations List */}
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
-            {factory?.areas?.filter((a: any) =>
-              a.areaName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              a.lines?.some((l: any) => l.workCenters?.some((wc: any) =>
-                (wc.name || '').toLowerCase().includes(searchQuery.toLowerCase())
-              ))
-            ).map((area: any) => (
-              <div key={area.id} className="space-y-1">
-                <div
-                  onClick={() => setCollapsedAreas(prev => ({ ...prev, [area.id]: !prev[area.id] }))}
-                  className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all ${selectedAreaId === area.id ? 'bg-indigo-50 border border-indigo-100' : 'hover:bg-slate-50'
-                    }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
-                      <LayoutGrid className="h-4 w-4" />
-                    </div>
-                    <span className="text-[13px] font-bold text-slate-700">{area.areaName}</span>
-                  </div>
-                  <ChevronRight className={`h-4 w-4 text-slate-400 transition-transform ${!collapsedAreas[area.id] ? 'rotate-90' : ''}`} />
-                </div>
-
-                {!collapsedAreas[area.id] && (
-                  <div className="pl-9 pr-1 py-1 space-y-3 border-l border-slate-100 ml-4">
-                    {/* Line Settings Section */}
-                    {area.lines?.map((line: any) => {
-                      const { fits, reqW, reqH } = validateLineFit(area, line, line.lineType || 'Straight');
-                      return (
-                        <div key={`line-settings-${line.id}`} className="bg-slate-50 p-2 rounded-lg border border-slate-200">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-[10px] font-bold text-slate-500 uppercase">Line Type</span>
-                            {!fits && (
-                                <div className="flex items-center gap-1 text-[9px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded animate-pulse" title={`Requires ${reqW}x${reqH}, but area is ${area.width}x${area.height}`}>
-                                    <AlertCircle className="h-3 w-3" /> Doesn't Fit
-                                </div>
-                            )}
-                          </div>
-                          <select 
-                            value={line.lineType || 'Straight'}
-                            onChange={(e) => {
-                              const newType = e.target.value;
-                              const newFactory = JSON.parse(JSON.stringify(factory));
-                              const targetArea = newFactory.areas.find((a: any) => a.id === area.id);
-                              const targetLine = targetArea.lines.find((l: any) => l.id === line.id);
-                              targetLine.lineType = newType;
-                              updateFactory(newFactory);
-                              
-                              // Align workstations based on selected type
-                              applyAutoLayout(area.id, newType);
-                            }}
-                            className="w-full text-xs bg-white border border-slate-200 rounded p-1 outline-none focus:border-indigo-500 transition-all"
-                          >
-                            <option value="Straight">Straight Line</option>
-                            <option value="L-Type">L-Type</option>
-                            <option value="U-Type">U-Type</option>
-                            <option value="Inverted U-Type">Inverted U-Type</option>
-                          </select>
-                        </div>
-                      );
-                    })}
-
-                    {/* Area Dimensions Section */}
-                    <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-500 uppercase">Area Bounds</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-[9px] text-slate-400 font-bold uppercase mb-1 block">X Pos</label>
-                          <input 
-                            type="number" 
-                            value={Math.round(area.x)} 
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value) || 0;
-                              const newFactory = JSON.parse(JSON.stringify(factory));
-                              const targetArea = newFactory.areas.find((a: any) => a.id === area.id);
-                              const dx = val - targetArea.x;
-                              targetArea.x = val;
-                              // Also move everything inside the area
-                              targetArea.lines.forEach((l: any) => {
-                                l.x += dx;
-                                l.workCenters.forEach((w: any) => w.x += dx);
-                              });
-                              updateFactory(newFactory);
-                            }}
-                            className="w-full text-xs border border-slate-200 rounded p-1.5 outline-none focus:border-indigo-500" 
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[9px] text-slate-400 font-bold uppercase mb-1 block">Y Pos</label>
-                          <input 
-                            type="number" 
-                            value={Math.round(area.y)} 
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value) || 0;
-                              const newFactory = JSON.parse(JSON.stringify(factory));
-                              const targetArea = newFactory.areas.find((a: any) => a.id === area.id);
-                              const dy = val - targetArea.y;
-                              targetArea.y = val;
-                              targetArea.lines.forEach((l: any) => {
-                                l.y += dy;
-                                l.workCenters.forEach((w: any) => w.y += dy);
-                              });
-                              updateFactory(newFactory);
-                            }}
-                            className="w-full text-xs border border-slate-200 rounded p-1.5 outline-none focus:border-indigo-500" 
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[9px] text-slate-400 font-bold uppercase mb-1 block">Width</label>
-                          <input 
-                            type="number" 
-                            value={tempAreaSize[area.id]?.w ?? Math.round(area.width)} 
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value) || 0;
-                              setTempAreaSize(prev => ({ ...prev, [area.id]: { ...prev[area.id], w: val } }));
-                            }}
-                            onBlur={(e) => {
-                              const inputVal = parseInt(e.target.value) || 200;
-                              const newFactory = JSON.parse(JSON.stringify(factory));
-                              const targetArea = newFactory.areas.find((a: any) => a.id === area.id);
-                              
-                              let minW = 200;
-                              targetArea.lines.forEach((l: any) => {
-                                const { reqW } = validateLineFit(targetArea, l, l.lineType || 'Straight');
-                                if (reqW + 100 > minW) minW = reqW + 100;
-                              });
-
-                              const finalVal = Math.max(minW, inputVal);
-                              targetArea.width = finalVal;
-                              targetArea.lines.forEach((l: any) => l.width = finalVal);
-                              setTempAreaSize(prev => {
-                                const next = { ...prev };
-                                delete next[area.id]?.w;
-                                return next;
-                              });
-                              updateFactory(newFactory);
-                            }}
-                            className="w-full text-xs border border-slate-200 rounded p-1.5 outline-none focus:border-indigo-500" 
-                          />
-                          <p className="text-[8px] text-slate-400 mt-1 italic">Min: {area.lines?.reduce((max: number, l: any) => Math.max(max, validateLineFit(area, l, l.lineType || 'Straight').reqW + 100), 200)}px</p>
-                        </div>
-                        <div>
-                          <label className="text-[9px] text-slate-400 font-bold uppercase mb-1 block">Height</label>
-                          <input 
-                            type="number" 
-                            value={tempAreaSize[area.id]?.h ?? Math.round(area.height)} 
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value) || 0;
-                              setTempAreaSize(prev => ({ ...prev, [area.id]: { ...prev[area.id], h: val } }));
-                            }}
-                            onBlur={(e) => {
-                              const inputVal = parseInt(e.target.value) || 200;
-                              const newFactory = JSON.parse(JSON.stringify(factory));
-                              const targetArea = newFactory.areas.find((a: any) => a.id === area.id);
-                              
-                              let minH = 200;
-                              targetArea.lines.forEach((l: any) => {
-                                const { reqH } = validateLineFit(targetArea, l, l.lineType || 'Straight');
-                                if (reqH + 150 > minH) minH = reqH + 150;
-                              });
-
-                              const finalVal = Math.max(minH, inputVal);
-                              targetArea.height = finalVal;
-                              targetArea.lines.forEach((l: any) => l.height = finalVal);
-                              setTempAreaSize(prev => {
-                                const next = { ...prev };
-                                delete next[area.id]?.h;
-                                return next;
-                              });
-                              updateFactory(newFactory);
-                            }}
-                            className="w-full text-xs border border-slate-200 rounded p-1.5 outline-none focus:border-indigo-500" 
-                          />
-                          <p className="text-[8px] text-slate-400 mt-1 italic">Min: {area.lines?.reduce((max: number, l: any) => Math.max(max, validateLineFit(area, l, l.lineType || 'Straight').reqH + 150), 200)}px</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {area.lines?.map((line: any) =>
-                      line.workCenters?.filter((wc: any) =>
-                        (wc.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        area.areaName.toLowerCase().includes(searchQuery.toLowerCase())
-                      ).map((wc: any, i: number) => (
-                        <div key={wc.id} className="group">
-                          <div
-                            onClick={() => setExpandedId(expandedId === wc.id ? null : wc.id)}
-                            className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all ${expandedId === wc.id ? 'bg-slate-100 shadow-sm' : 'hover:bg-slate-50'
-                              }`}
-                          >
-                            <div className="flex items-center gap-2.5">
-                              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-50 text-slate-400 text-[10px] font-bold font-mono border border-slate-100">{i + 1}</div>
-                              <span className="text-xs font-medium text-slate-600 truncate max-w-[140px]">
-                                {wc.name || 'Workstation'}
-                              </span>
-                            </div>
-                            {expandedId === wc.id ? <ChevronDown className="h-3.5 w-3.5 text-slate-400" /> : <ChevronRight className="h-3.5 w-3.5 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />}
-                          </div>
-
-                          {expandedId === wc.id && (
-                            <div className="p-3 mt-1.5 mb-1.5 bg-slate-50 border border-slate-100 rounded-xl space-y-2.5">
-                              <div className="grid grid-cols-2 gap-2.5">
-                                <div>
-                                  <label className="text-[9px] text-slate-400 font-bold uppercase mb-1 block">X Position</label>
-                                  <input type="number" value={Math.round(wc.x)} readOnly className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white outline-none text-slate-600" />
-                                </div>
-                                <div>
-                                  <label className="text-[9px] text-slate-400 font-bold uppercase mb-1 block">Y Position</label>
-                                  <input type="number" value={Math.round(wc.y)} readOnly className="w-full text-xs border border-slate-200 rounded-lg p-2 bg-white outline-none text-slate-600" />
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
               </div>
-            ))}
-          </div>
-
-          {!isAdmin && !readOnly && (
-            <div className="p-4 border-t border-slate-100 bg-white">
-              <Button onClick={handleExportCSV} className="w-full gap-2 bg-slate-900 hover:bg-black text-white shadow-md rounded-xl h-10 text-xs font-bold uppercase tracking-wider">
-                <Download className="h-3.5 w-3.5" /> Export Layout
-              </Button>
             </div>
-          )}
+
+            {(selectedArea || selectedWc) && (
+              <div className="bg-slate-900 rounded-3xl p-6 shadow-2xl animate-in fade-in slide-in-from-left-4 duration-300 border border-slate-800">
+                <div className="flex items-center gap-3 mb-8"><div className="p-2.5 rounded-xl bg-white/10 text-white shadow-inner">{selectedWc ? <Activity className="h-5 w-5" /> : <LayoutGrid className="h-5 w-5" />}</div><div><h4 className="text-sm font-black text-white uppercase tracking-tight">{selectedWc ? selectedWc.name : selectedArea?.areaName}</h4><p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{selectedWc ? 'Workstation' : 'Assembly Area'}</p></div></div>
+                <div className="space-y-6">
+                  {selectedArea && (
+                    <div className="space-y-2">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Line Routing Type</label>
+                      <select value={localInputs.lineType || 'Straight'} onChange={e => updateSelectedItem('lineType', e.target.value)} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 appearance-none cursor-pointer">
+                        <option value="Straight">Straight Line</option>
+                        <option value="L-Type">L Type</option>
+                        <option value="U-Type">U Type</option>
+                        <option value="Inverted-U">Inverted U Type</option>
+                      </select>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-5">
+                    <div className="space-y-2"><label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">X Pos</label><input type="text" value={localInputs.x || ''} onChange={e => updateSelectedItem('x', e.target.value)} onBlur={syncLocalInputs} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 transition-all" /></div>
+                    <div className="space-y-2"><label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Y Pos</label><input type="text" value={localInputs.y || ''} onChange={e => updateSelectedItem('y', e.target.value)} onBlur={syncLocalInputs} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 transition-all" /></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-5">
+                    <div className="space-y-2"><label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Width</label><input type="text" value={localInputs.width || ''} onChange={e => updateSelectedItem('width', e.target.value)} onBlur={syncLocalInputs} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 transition-all" /></div>
+                    <div className="space-y-2"><label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Height</label><input type="text" value={localInputs.height || ''} onChange={e => updateSelectedItem('height', e.target.value)} onBlur={syncLocalInputs} className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-white outline-none focus:border-slate-500 transition-all" /></div>
+                  </div>
+                  <div className="pt-4"><Button onClick={() => { setSelectedWcId(null); setSelectedAreaId(null); }} className="w-full rounded-2xl bg-white text-slate-900 font-black uppercase text-[10px] tracking-widest h-12 hover:bg-slate-100 shadow-xl transition-all active:scale-[0.98]">Done Editing</Button></div>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><LayoutGrid className="h-4 w-4" /> Assembly Units</h3>
+              <div className="space-y-2">
+                {factory.areas.map((area: any) => (
+                  <div key={area.id} onClick={() => { setSelectedAreaId(area.id); setSelectedWcId(null); }} className={`p-4 rounded-2xl border cursor-pointer transition-all flex justify-between items-center group ${selectedAreaId === area.id ? 'bg-white border-slate-900 shadow-lg ring-1 ring-slate-100' : 'bg-white border-slate-100 hover:border-slate-200 shadow-sm'}`}><div className="flex items-center gap-3"><input type="checkbox" checked={selectedAreaId === area.id} readOnly className="h-4 w-4 accent-slate-900 rounded border-slate-300" /><span className={`text-xs font-black uppercase tracking-wide transition-colors ${selectedAreaId === area.id ? 'text-slate-900' : 'text-slate-500 group-hover:text-slate-900'}`}>{area.areaName}</span></div><ChevronRight className={`h-4 w-4 transition-all ${selectedAreaId === area.id ? 'text-slate-900 translate-x-1' : 'text-slate-300'}`} /></div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Canvas Container */}
-        <div ref={containerRef} className="flex-1 overflow-hidden z-10 bg-[#0f172a] flex items-center justify-center">
-          <canvas
-            ref={canvasRef}
-            className="w-full h-full cursor-grab active:cursor-grabbing block"
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseLeave}
-            onWheel={handleWheel}
-            onContextMenu={e => e.preventDefault()}
-          />
-          {/* Hover Tooltip (Removed from Developer side) */}
-        </div>
-
-        {/* Bottom instructions bar */}
-        <div className="border-t border-slate-200 bg-white px-5 py-2.5 text-xs text-slate-400 flex items-center justify-between absolute bottom-0 left-0 right-0 z-20">
-          <div className="flex gap-4">
-            <span className="flex items-center gap-1"><Move className="h-3.5 w-3.5" /> Pan: Click (empty space) &amp; Drag</span>
-            <span className="flex items-center gap-1"><ZoomIn className="h-3.5 w-3.5" /> Zoom: Scroll</span>
-            <span className="flex items-center gap-1 text-slate-500 font-medium"><Move className="h-3.5 w-3.5" /> Move Machine: Click &amp; Drag</span>
+        <div ref={containerRef} className="flex-1 relative bg-[#0f172a] cursor-crosshair">
+          <canvas ref={canvasRef} className="w-full h-full block" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={e => setViewState(p => ({ ...p, targetZoom: Math.max(0.1, Math.min(5, p.targetZoom * (e.deltaY > 0 ? 0.9 : 1.1))) }))} />
+          <div className="absolute bottom-6 left-6 flex items-center gap-6 px-6 py-3 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200 shadow-2xl z-20">
+            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter"><Move className="h-4 w-4 text-slate-400" /> Pan: Click Space & Drag</div><div className="h-4 w-px bg-slate-200"></div>
+            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter"><Search className="h-4 w-4 text-slate-400" /> Zoom: Scroll</div><div className="h-4 w-px bg-slate-200"></div>
+            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter"><Maximize2 className="h-4 w-4 text-slate-400" /> Move Machine: Drag Inside Area</div>
           </div>
         </div>
       </div>

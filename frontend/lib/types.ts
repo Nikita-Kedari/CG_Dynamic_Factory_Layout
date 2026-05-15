@@ -29,6 +29,7 @@ export interface WorkCenter {
   status: WorkCenterStatus;
   parameters?: RuntimeParameters;
   areaId?: string; // Link to area
+  wsSequence?: number; // Sorting order within line
   detail?: string; // Tooltip info from CSV
 }
 

@@ -239,6 +239,15 @@ export default function DeveloperPage() {
                                                 <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-full">Draft</span>
                                             ) : l.status === 'pending' ? (
                                                 <span className="px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">Pending Admin</span>
+                                            ) : l.status === 'pushed' ? (
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full w-fit">Changes Requested</span>
+                                                    {l.adminComments && (
+                                                        <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded border border-blue-100 mt-1">
+                                                            <strong>Admin Feedback:</strong> {l.adminComments}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             ) : l.status === 'rejected' ? (
                                                 <div className="flex flex-col gap-1">
                                                     <span className="inline-block px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full w-fit">Rejected</span>
@@ -256,7 +265,7 @@ export default function DeveloperPage() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm align-top">
                                             <div className="flex justify-end gap-2 text-slate-900">
-                                                {(!l.status || l.status === 'draft' || l.status === 'rejected') && (
+                                                {(!l.status || l.status === 'draft' || l.status === 'rejected' || l.status === 'pushed') && (
                                                     <>
                                                         <Link href={`/admin/editor?id=${l.id}`}>
                                                             <Button variant="outline" size="sm" className="text-slate-900 hover:text-slate-900 border-slate-200 hover:bg-slate-100">
@@ -268,7 +277,7 @@ export default function DeveloperPage() {
                                                             size="sm" 
                                                             className="bg-indigo-600 hover:bg-indigo-700 text-white"
                                                         >
-                                                            {l.status === 'rejected' ? 'Re-Submit' : 'Pass to Admin'}
+                                                            {(l.status === 'rejected' || l.status === 'pushed') ? 'Re-Submit' : 'Pass to Admin'}
                                                         </Button>
                                                     </>
                                                 )}

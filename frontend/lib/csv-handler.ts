@@ -17,106 +17,117 @@ export const parseCSV = (csvContent: string): Factory => {
   if (headers.includes('factory_code') || headers.includes('canvas_width')) {
     let factoryId = '101', factoryName = 'Factory', layoutName = 'Layout';
     let canvasW = 5000, canvasH = 3500;
-    
+
     const areasMap = new Map<string, Area>();
     const flows: Flow[] = [];
 
     for (let i = 1; i < lines.length; i++) {
-        const parts = lines[i].split(',').map(p => p.trim());
-        if (parts.length < 15) continue;
+      const parts = lines[i].split(',').map(p => p.trim());
+      if (parts.length < 15) continue;
 
-        // Factory Info (only need from first row)
-        if (i === 1) {
-            factoryId = parts[0] || factoryId;
-            factoryName = parts[1] || factoryName;
-            layoutName = parts[2] || layoutName;
-            canvasW = parseFloat(parts[3]) || canvasW;
-            canvasH = parseFloat(parts[4]) || canvasH;
-        }
+      // Factory Info (only need from first row)
+      if (i === 1) {
+        factoryId = parts[0] || factoryId;
+        factoryName = parts[1] || factoryName;
+        layoutName = parts[2] || layoutName;
+        canvasW = parseFloat(parts[3]) || canvasW;
+        canvasH = parseFloat(parts[4]) || canvasH;
+      }
 
-        const areaCode = parts[5];
-        const areaName = parts[6];
-        const areaX = parseFloat(parts[7]);
-        const areaY = parseFloat(parts[8]);
-        const areaW = parseFloat(parts[9]);
-        const areaH = parseFloat(parts[10]);
+      const areaCode = parts[5];
+      const areaName = parts[6];
+      const areaX = parseFloat(parts[7]);
+      const areaY = parseFloat(parts[8]);
+      const areaW = parseFloat(parts[9]);
+      const areaH = parseFloat(parts[10]);
 
-        const lineCode = parts[12];
-        const lineName = parts[13];
-        const lineType = parts[14] as any;
+      const lineCode = parts[12];
+      const lineName = parts[13];
+      const lineType = parts[14] as any;
 
-        const wsCode = parts[17];
-        const wsName = parts[18];
-        const wsSeq = parseInt(parts[19]) || 0;
-        const wsX = parseFloat(parts[20]);
-        const wsY = parseFloat(parts[21]);
-        const wsW = parseFloat(parts[22]);
-        const wsH = parseFloat(parts[23]);
+      const wsCode = parts[17];
+      const wsName = parts[18];
+      const wsSeq = parseInt(parts[19]) || 0;
+      const wsX = parseFloat(parts[20]);
+      const wsY = parseFloat(parts[21]);
+      const wsW = parseFloat(parts[22]);
+      const wsH = parseFloat(parts[23]);
 
-        const fromWs = parts[26];
-        const toWs = parts[27];
-        const detail = parts[31];
+      const fromWs = parts[26];
+      const toWs = parts[27];
+      const detail = parts[31];
 
-        // 1. Get or Create Area
-        if (!areasMap.has(areaCode)) {
-            areasMap.set(areaCode, {
-                id: areaCode,
-                areaId: areaCode,
-                areaName: areaName,
-                x: areaX,
-                y: areaY,
-                width: areaW,
-                height: areaH,
-                lines: [],
-                buffers: [],
-                storage: []
-            });
-        }
-        const area = areasMap.get(areaCode)!;
+      // 1. Get or Create Area
+      if (!areasMap.has(areaCode)) {
+        areasMap.set(areaCode, {
+          id: areaCode,
+          areaId: areaCode,
+          areaName: areaName,
+          x: areaX,
+          y: areaY,
+          width: areaW,
+          height: areaH,
+          lines: [],
+          buffers: [],
+          storage: []
+        });
+      }
+      const area = areasMap.get(areaCode)!;
 
-        // 2. Get or Create Line in Area
-        let line = area.lines.find(l => l.lineId === lineCode);
-        if (!line) {
-            line = {
-                id: lineCode,
-                lineId: lineCode,
-                lineName: lineName,
-                x: areaX,
-                y: areaY,
-                width: areaW,
-                height: areaH,
-                lineType: lineType || 'Straight',
-                workCenters: []
-            };
-            area.lines.push(line);
-        }
+      // 2. Get or Create Line in Area
+      let line = area.lines.find(l => l.lineId === lineCode);
+      if (!line) {
+        line = {
+          id: lineCode,
+          lineId: lineCode,
+          lineName: lineName,
+          x: areaX,
+          y: areaY,
+          width: areaW,
+          height: areaH,
+          lineType: (lineType?.includes('U-Type') ? 'U-Type' : lineType?.includes('L-Type') ? 'L-Type' : 'Straight') as any,
+          workCenters: []
+        };
+        area.lines.push(line);
+      }
 
-        // 3. Add Workstation
-        if (wsCode) {
-            line.workCenters.push({
-                id: wsCode,
-                workCenterId: wsCode,
-                machineName: wsName,
-                x: wsX,
-                y: wsY,
-                width: wsW || 90,
-                height: wsH || 90,
-                status: 'operational',
-                detail: detail,
-                areaId: areaCode
-            });
-        }
+      // 3. Add Workstation
+      if (wsCode) {
+        // Dynamic parameters from CSV columns
+        const parameters: any = {
+          lastUpdated: new Date()
+        };
+        // Add all available columns to parameters for dynamic display
+        headers.forEach((h, idx) => {
+          if (parts[idx]) parameters[h] = parts[idx];
+        });
 
-        // 4. Add Flow
-        if (fromWs && toWs) {
-            flows.push({
-                id: `f-${fromWs}-${toWs}`,
-                fromWsId: fromWs,
-                toWsId: toWs,
-                arrowType: 'escalator',
-                label: 'Flow'
-            });
-        }
+        line.workCenters.push({
+          id: wsCode,
+          workCenterId: wsCode,
+          machineName: wsName,
+          x: wsX,
+          y: wsY,
+          width: wsW || 90,
+          height: wsH || 90,
+          status: 'operational',
+          detail: detail,
+          areaId: areaCode,
+          wsSequence: wsSeq,
+          parameters: parameters
+        });
+      }
+
+      // 4. Add Flow
+      if (fromWs && toWs) {
+        flows.push({
+          id: `f-${fromWs}-${toWs}`,
+          fromWsId: fromWs,
+          toWsId: toWs,
+          arrowType: 'escalator',
+          label: 'Flow'
+        });
+      }
     }
 
     return {
@@ -149,7 +160,7 @@ export const parseCSV = (csvContent: string): Factory => {
     const data: any = {};
     headers.forEach((h, idx) => data[h] = values[idx]);
 
-    if (!data.areaname) continue; 
+    if (!data.areaname) continue;
 
     if (!areaMap.has(data.areaname)) {
       areaMap.set(data.areaname, {
@@ -167,7 +178,7 @@ export const parseCSV = (csvContent: string): Factory => {
     }
 
     const area = areaMap.get(data.areaname)!;
-    
+
     let line = area.lines.find(l => l.lineName === data.linename);
     if (!line) {
       if (!data.linename) continue;

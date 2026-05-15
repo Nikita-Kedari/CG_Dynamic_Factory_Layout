@@ -8,18 +8,19 @@ export async function POST(
     try {
         const { id } = await params;
         const body = await request.json();
-        const adminComments = body.adminComments;
-        const reviewedBy = body.reviewedBy || 'Admin';
+        const adminComments = body.admin_comments || body.adminComments;
+        const status = body.status;
+        const reviewedBy = body.reviewed_by || body.reviewedBy || 'Admin';
         
-        if (typeof adminComments !== 'string') {
-            return NextResponse.json({ error: 'Comment must be a string' }, { status: 400 });
-        }
-        
-        const updated = updateLayout(id, { 
+        const updates: any = { 
             adminComments,
             reviewedBy,
             reviewedAt: new Date().toISOString()
-        });
+        };
+
+        if (status) updates.status = status;
+        
+        const updated = updateLayout(id, updates);
         
         if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
         return NextResponse.json(updated);

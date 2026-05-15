@@ -74,13 +74,13 @@ export default function Home() {
           </p>
 
           <div className="mt-12 flex flex-col sm:flex-row justify-center gap-4 sm:gap-6">
-            <Link href="/developer">
+            <Link href="/login">
               <Button size="lg" className="w-full sm:w-auto rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 h-14 text-base shadow-[0_0_30px_-5px_rgba(37,99,235,0.5)] transition-all hover:scale-105 hover:shadow-[0_0_40px_-5px_rgba(37,99,235,0.6)]">
                 <Cpu className="mr-2 h-5 w-5" />
                 Developer Portal
               </Button>
             </Link>
-            <Link href="/admin">
+            <Link href="/login">
               <Button size="lg" variant="outline" className="w-full sm:w-auto rounded-full border-white/10 bg-white/5 hover:bg-white/10 text-white h-14 px-8 text-base backdrop-blur-md transition-all hover:scale-105">
                 <ShieldCheck className="mr-2 h-5 w-5 text-indigo-400" />
                 Admin Console
@@ -213,7 +213,7 @@ export default function Home() {
                 </div>
                 <h3 className="text-2xl font-bold text-white mb-2">1. Developer</h3>
                 <p className="text-slate-400 text-sm mb-6 max-w-[250px]">Upload configuration CSVs to seamlessly draft new floor layout versions.</p>
-                <Link href="/developer" className="mt-auto">
+                <Link href="/login" className="mt-auto">
                   <Button variant="link" className="text-blue-400 hover:text-blue-300 group">
                     Developer Portal <ArrowRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-1" />
                   </Button>
@@ -227,7 +227,7 @@ export default function Home() {
                 </div>
                 <h3 className="text-2xl font-bold text-white mb-2">2. Administrator</h3>
                 <p className="text-slate-400 text-sm mb-6 max-w-[280px]">Inspect visual layouts in the Editor and Approve drafts to deploy them globally.</p>
-                <Link href="/admin" className="mt-auto">
+                <Link href="/login" className="mt-auto">
                   <Button variant="link" className="text-indigo-400 hover:text-indigo-300 group">
                     Admin Console <ArrowRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-1" />
                   </Button>

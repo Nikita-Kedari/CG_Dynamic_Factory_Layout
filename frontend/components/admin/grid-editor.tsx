@@ -66,7 +66,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   const [factory, setFactory] = useState(initialFactory || threeAssembliesFactory);
   const [history, setHistory] = useState<any[]>([]);
   const [redoStack, setRedoStack] = useState<any[]>([]);
-  const [viewState, setViewState] = useState({ zoom: 0.35, panX: 60, panY: 60, time: 0, targetZoom: 0.35, targetPanX: 60, targetPanY: 60 });
+  const [viewState, setViewState] = useState({ zoom: 0.25, panX: 60, panY: 60, time: 0, targetZoom: 0.25, targetPanX: 60, targetPanY: 60 });
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [selectedWcId, setSelectedWcId] = useState<string | null>(null);
   const [adminComment, setAdminComment] = useState('');
@@ -194,18 +194,11 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
 
   const handleFitToScreen = useCallback(() => {
     const canvas = canvasRef.current; if (!canvas || !factory) return;
-    const pad = 120;
+    const pad = 200;
     const scale = Math.min((canvas.width - pad * 2) / factory.width, (canvas.height - pad * 2) / factory.height, 1.0);
-    const targetZoom = Math.max(0.1, scale * 0.85); // 15% buffer for better overview
+    const targetZoom = Math.max(0.2, scale);
     setViewState(prev => ({ ...prev, targetZoom, targetPanX: (canvas.width - factory.width * targetZoom) / 2, targetPanY: (canvas.height - factory.height * targetZoom) / 2 }));
   }, [factory]);
-
-  // Auto-fit when loading in Review Mode
-  useEffect(() => {
-    if (isAdmin && !onSave && factory) {
-      handleFitToScreen();
-    }
-  }, [isAdmin, onSave, !!factory, handleFitToScreen]);
 
   const downloadCSV = () => {
     const headers = factory.csvHeaders || [
@@ -738,18 +731,10 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   if (isAdmin || readOnly || isPublicView) {
     return (
       <div className="flex flex-1 flex-col relative bg-[#060b14] overflow-hidden w-full h-full font-sans">
-        <style dangerouslySetInnerHTML={{ __html: `
-          @media print {
-            .no-print { display: none !important; }
-            body, html { height: auto !important; background: white !important; }
-            .canvas-container { position: relative !important; width: 100% !important; height: auto !important; }
-            canvas { width: 100% !important; height: auto !important; box-shadow: none !important; }
-          }
-        `}} />
-        <div ref={containerRef} className="flex-1 overflow-hidden z-10 flex items-center justify-center canvas-container">
-          <canvas ref={canvasRef} className="block cursor-grab active:cursor-grabbing w-full h-full" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={e => setViewState(p => ({ ...p, targetZoom: Math.max(0.2, Math.min(3, p.targetZoom * (e.deltaY > 0 ? 0.9 : 1.1))) }))} />
+        <div ref={containerRef} className="flex-1 overflow-hidden z-10 flex items-center justify-center">
+          <canvas ref={canvasRef} className="block cursor-grab active:cursor-grabbing w-full h-full" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={e => setViewState(p => ({ ...p, targetZoom: Math.max(0.35, Math.min(3, p.targetZoom * (e.deltaY > 0 ? 0.9 : 1.1))) }))} />
         </div>
-        <div className="absolute top-[380px] left-8 z-20 w-[240px] flex flex-col gap-5 bg-[#0f172a]/95 backdrop-blur-md border border-[#1e293b] rounded-2xl shadow-2xl p-6 no-print">
+        <div className="absolute top-[380px] left-8 z-20 w-[240px] flex flex-col gap-5 bg-[#0f172a]/95 backdrop-blur-md border border-[#1e293b] rounded-2xl shadow-2xl p-6">
           <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-800 pb-3 mb-1">Architectural Legend</h3>
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-4 text-slate-300 text-[10px] font-black uppercase tracking-widest group cursor-default"><div className="w-8 h-4 border-2 border-[#10b981] rounded-sm group-hover:scale-110 transition-transform"></div><span>Workstation</span></div>
@@ -758,16 +743,16 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
             <div className="flex items-center gap-4 text-slate-300 text-[10px] font-black uppercase tracking-widest group cursor-default"><div className="w-8 h-4 border-2 border-dashed border-slate-700 rounded-sm group-hover:scale-110 transition-transform"></div><span>Area Bound</span></div>
           </div>
         </div>
-        <div className="absolute top-[110px] left-8 z-20 w-[280px] bg-[#0f172a]/95 backdrop-blur-md border border-[#1e293b] rounded-2xl shadow-2xl p-6 no-print">
+        <div className="absolute top-[110px] left-8 z-20 w-[280px] bg-[#0f172a]/95 backdrop-blur-md border border-[#1e293b] rounded-2xl shadow-2xl p-6">
           <h3 className="text-[11px] font-bold text-slate-300 uppercase tracking-widest mb-5 flex items-center gap-2"><LayoutGrid className="h-4 w-4 text-indigo-400" /> Display Parameters</h3>
           <div className="space-y-4">{allFilters.map(f => (<label key={f.id} className="flex items-start gap-4 p-2 hover:bg-[#1e293b]/50 rounded-xl cursor-pointer transition-colors group"><input type="checkbox" checked={activeFilterIds[f.id]} onChange={() => setActiveFilterIds(p => ({ ...p, [f.id]: !p[f.id] }))} className="mt-0.5 h-4.5 w-4.5 accent-indigo-500 rounded border-slate-700 bg-slate-900" /><div className="flex flex-col gap-0.5"><span className="text-[12px] font-bold text-slate-200 group-hover:text-white">{f.label}</span><span className="text-[10px] text-slate-500">{f.description}</span></div></label>))}</div>
         </div>
-        <div className="absolute top-0 left-0 right-0 z-20 flex justify-between p-8 bg-gradient-to-b from-[#060b14] via-[#060b14]/80 to-transparent no-print">
+        <div className="absolute top-0 left-0 right-0 z-20 flex justify-between p-8 bg-gradient-to-b from-[#060b14] via-[#060b14]/80 to-transparent">
           <div className="flex items-center gap-8"><Button onClick={() => window.location.href = isPublicView ? '/' : '/admin'} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155] transition-all active:scale-95"><ArrowLeft className="mr-3 h-5 w-5" /> {isPublicView ? 'Exit View' : 'Back to Console'}</Button><div className="h-10 w-px bg-slate-800"></div><div><h2 className="text-white font-bold text-2xl tracking-tight mb-1">{factory?.name || 'Blueprint Reviewer'}</h2><p className="text-indigo-400 text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-2"><CheckCircle2 className="h-3 w-3" /> {isPublicView ? 'Public Shared View' : 'Mandatory Review Mode (View Only)'}</p></div></div>
           <div className="flex gap-4"><Button onClick={() => navigator.clipboard.writeText(getShareUrl()).then(() => setShareMsg(true))} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155]">{shareMsg ? 'Link Copied ✓' : 'Share URL'}</Button><Button onClick={() => window.print()} className="bg-indigo-600 text-white rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-indigo-700 transition-all">Download Blueprint</Button></div>
         </div>
         {!isPublicView && isAdmin && (
-          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-full max-w-5xl z-20 flex flex-col gap-5 bg-[#0f172a]/98 backdrop-blur-xl border border-[#1e293b] p-8 rounded-3xl shadow-2xl ring-1 ring-white/5 no-print">
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-full max-w-5xl z-20 flex flex-col gap-5 bg-[#0f172a]/98 backdrop-blur-xl border border-[#1e293b] p-8 rounded-3xl shadow-2xl ring-1 ring-white/5">
             <div className="flex justify-between items-center px-1"><h3 className="text-white text-xs font-black uppercase tracking-widest flex items-center gap-2"><MessageSquare className="h-4 w-4 text-indigo-400" /> Reviewer Feedback</h3><div className="flex gap-2 items-center text-[10px] text-slate-500 font-bold uppercase tracking-widest"><div className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse"></div> Secure Session</div></div>
             <div className="flex gap-4 items-center"><input type="text" value={adminComment} onChange={e => setAdminComment(e.target.value)} className="flex-1 bg-[#0b1120] border border-[#1e293b] rounded-2xl px-6 py-5 text-sm text-slate-200 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-slate-600" placeholder="Type your detailed architectural feedback here..." /><Button onClick={() => handleReviewAction('push')} className="bg-[#3f83f8] hover:bg-[#2563eb] text-white px-8 h-16 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 transition-all active:scale-95 flex items-center gap-2"><Send className="h-4 w-4" /> Push to Dev</Button><Button onClick={() => handleReviewAction('approve')} className="bg-[#10b981] hover:bg-[#059669] text-white px-8 h-16 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 transition-all active:scale-95">Approve</Button><Button onClick={() => handleReviewAction('reject')} className="bg-[#ef4444] hover:bg-[#dc2626] text-white px-8 h-16 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-rose-500/20 transition-all active:scale-95">Reject</Button></div>
           </div>

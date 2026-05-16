@@ -68,7 +68,18 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number>(0);
-  const dragRef = useRef<{ type: 'pan' | 'wc' | 'area', id: string, areaId?: string, startX: number, startY: number, itemStartX: number, itemStartY: number } | null>(null);
+  const dragRef = useRef<{ 
+    type: 'pan' | 'wc' | 'area' | 'waypoint', 
+    id: string, 
+    areaId?: string, 
+    startX: number, 
+    startY: number, 
+    itemStartX: number, 
+    itemStartY: number,
+    flowId?: string,
+    wpIndex?: number,
+    initialState?: any
+  } | null>(null);
 
   const [factory, setFactory] = useState(initialFactory || threeAssembliesFactory);
   const [history, setHistory] = useState<any[]>([]);
@@ -77,6 +88,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   const [selectedWcId, setSelectedWcId] = useState<string | null>(null);
   const [hoveredWcId, setHoveredWcId] = useState<string | null>(null);
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+  const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [adminComment, setAdminComment] = useState('');
   
@@ -660,14 +672,13 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       if (!from || !to) return;
 
       const isInternal = from.area.id === to.area.id;
-      const flowColor = isInternal ? '#fbbf24' : '#ef4444';
+      const flowColor = flow.id === selectedFlowId ? '#38bdf8' : (isInternal ? '#fbbf24' : '#ef4444');
       
       const dx = to.x - from.x;
       const dy = to.y - from.y;
       const dist = Math.sqrt(dx*dx + dy*dy);
       
       let fx, fy, tx, ty;
-      // Define Entry/Exit side
       if (Math.abs(dx) > Math.abs(dy)) {
         fx = (dx > 0 ? (from.x + from.width) : from.x) * zoom + panX;
         fy = (from.y + from.height / 2) * zoom + panY;
@@ -680,32 +691,50 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
         ty = (dy > 0 ? to.y : (to.y + to.height)) * zoom + panY;
       }
 
-      let path: { x: number; y: number }[] = [{ x: fx, y: fy }];
-      const laneSpace = (fIdx % 6 + 1) * 20 * zoom;
-
-      // PRIORITY ROUTING based on distance and alignment
-      if (isInternal || dist < 500) {
-        // --- Short Distance: Straight or L-Shape ---
-        if (Math.abs(fy - ty) < 20 || Math.abs(fx - tx) < 20) {
-          path.push({ x: tx, y: ty }); // Straight
+      let path: { x: number; y: number }[] = [];
+      
+      if (flow.routingPoints && flow.routingPoints.length >= 2) {
+        // Use manual routing points (scaled)
+        path = flow.routingPoints.map((pt: [number, number]) => ({
+          x: pt[0] * zoom + panX,
+          y: pt[1] * zoom + panY
+        }));
+      } else {
+        // Fallback to Auto-routing
+        path = [{ x: fx, y: fy }];
+        const laneSpace = (fIdx % 6 + 1) * 20 * zoom;
+        if (isInternal || dist < 500) {
+          if (Math.abs(fy - ty) < 20 || Math.abs(fx - tx) < 20) {
+            path.push({ x: tx, y: ty });
+          } else {
+            path.push({ x: tx, y: fy });
+            path.push({ x: tx, y: ty });
+          }
         } else {
-          // L-Shape (Direct)
-          path.push({ x: tx, y: fy });
+          const useTop = dy < 0; 
+          const perimeterY = useTop 
+            ? (from.area.y - 40) * zoom + panY - laneSpace 
+            : (from.area.y + from.area.height + 40) * zoom + panY + laneSpace;
+          path.push({ x: fx, y: perimeterY });
+          path.push({ x: tx, y: perimeterY });
           path.push({ x: tx, y: ty });
         }
-      } else {
-        // --- Long Distance: U-Shape or Inverted U-Shape (Corridor) ---
-        const useTop = dy < 0; 
-        const perimeterY = useTop 
-          ? (from.area.y - 40) * zoom + panY - laneSpace 
-          : (from.area.y + from.area.height + 40) * zoom + panY + laneSpace;
-        
-        path.push({ x: fx, y: perimeterY });
-        path.push({ x: tx, y: perimeterY });
-        path.push({ x: tx, y: ty });
       }
 
       drawPathWithArrow(path, flowColor, true, { w: to.width * zoom, h: to.height * zoom });
+
+      // Render Handles for selected flow
+      if (flow.id === selectedFlowId && !isPublicView && !readOnly) {
+        path.forEach((pt, idx) => {
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, 6 * zoom, 0, Math.PI * 2);
+          ctx.fillStyle = '#38bdf8';
+          ctx.fill();
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1.5 * zoom;
+          ctx.stroke();
+        });
+      }
     });
   }, [factory, viewState, showGrid, activeFilterIds, dynamicWorkstationData, selectedAreaId, selectedWcId, isAdmin, isPublicView, hoveredWcId, isCapturing]);
 
@@ -728,24 +757,89 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       return;
     }
     const rect = canvasRef.current?.getBoundingClientRect(); if (!rect) return;
-    const mouseX = (e.clientX - rect.left - viewState.panX) / viewState.zoom;
-    const mouseY = (e.clientY - rect.top - viewState.panY) / viewState.zoom;
+    const { zoom, panX, panY } = viewState;
+    const worldX = (e.clientX - rect.left - panX) / zoom;
+    const worldY = (e.clientY - rect.top - panY) / zoom;
     
-    // Capture state for history before potential drag
     const initialState = JSON.parse(JSON.stringify(factory));
 
-    for (const area of factory.areas) {
-      for (const line of area.lines || []) {
-        for (const wc of line.workCenters || []) {
-          if (mouseX >= wc.x && mouseX <= wc.x + wc.width && mouseY >= wc.y && mouseY <= wc.y + wc.height) {
-            dragRef.current = { type: 'wc', id: wc.id, areaId: area.id, startX: e.clientX, startY: e.clientY, itemStartX: wc.x, itemStartY: wc.y, initialState } as any;
-            setSelectedWcId(wc.id); setSelectedAreaId(area.id); return;
+    // 1. Check Waypoint Handles (If a flow is already selected)
+    if (selectedFlowId) {
+      const flow = factory.flows.find((f: any) => f.id === selectedFlowId);
+      if (flow && flow.routingPoints) {
+        for (let i = 0; i < flow.routingPoints.length; i++) {
+          const pt = flow.routingPoints[i];
+          const dist = Math.sqrt((worldX - pt[0])**2 + (worldY - pt[1])**2);
+          if (dist < 10) { // 10 world unit tolerance
+            dragRef.current = { type: 'waypoint', id: flow.id, flowId: flow.id, wpIndex: i, startX: e.clientX, startY: e.clientY, itemStartX: pt[0], itemStartY: pt[1], initialState };
+            return;
           }
         }
       }
     }
+
+    // 2. Check Workstations
+    for (const area of factory.areas) {
+      for (const line of area.lines || []) {
+        for (const wc of line.workCenters || []) {
+          if (worldX >= wc.x && worldX <= wc.x + wc.width && worldY >= wc.y && worldY <= wc.y + wc.height) {
+            dragRef.current = { type: 'wc', id: wc.id, areaId: area.id, startX: e.clientX, startY: e.clientY, itemStartX: wc.x, itemStartY: wc.y, initialState } as any;
+            setSelectedWcId(wc.id); setSelectedAreaId(area.id); setSelectedFlowId(null); return;
+          }
+        }
+      }
+    }
+
+    // 3. Check Flow Lines (Selection)
+    // For simplicity, we check if the mouse is near any segment of the auto-calculated or manual path
+    // This is expensive but necessary for "Select-to-Edit"
+    const allWcsMap: Record<string, any> = {};
+    factory.areas.forEach((a: any) => a.lines.forEach((l: any) => l.workCenters.forEach((w: any) => { allWcsMap[w.id] = w; })));
+    
+    for (const flow of (factory.flows || [])) {
+       // Re-calculate the current path to check hits
+       const from = allWcsMap[flow.fromWsId]; const to = allWcsMap[flow.toWsId];
+       if (!from || !to) continue;
+
+       let path: [number, number][] = [];
+       if (flow.routingPoints) {
+         path = flow.routingPoints;
+       } else {
+         // Re-run the auto-routing logic to get segments in world coords
+         const dx = to.x - from.x; const dy = to.y - from.y;
+         const fx = (dx > 0 ? (from.x + from.width) : from.x); const fy = (from.y + from.height / 2);
+         const tx = (dx > 0 ? to.x : (to.x + to.width)); const ty = (to.y + to.height / 2);
+         path = [[fx, fy], [tx, fy], [tx, ty]]; // Simplified L-Shape for hit test
+       }
+
+       for (let i = 0; i < path.length - 1; i++) {
+         const p1 = path[i]; const p2 = path[i+1];
+         // Basic point-to-line segment distance
+         const l2 = (p2[0]-p1[0])**2 + (p2[1]-p1[1])**2;
+         const t = Math.max(0, Math.min(1, ((worldX-p1[0])*(p2[0]-p1[0]) + (worldY-p1[1])*(p2[1]-p1[1])) / l2));
+         const dist = Math.sqrt((worldX - (p1[0] + t*(p2[0]-p1[0])))**2 + (worldY - (p1[1] + t*(p2[1]-p1[1])))**2);
+         
+         if (dist < 10) {
+           setSelectedFlowId(flow.id);
+           setSelectedWcId(null);
+           // Initialize routing points if empty so they appear for editing
+           if (!flow.routingPoints) {
+              const dx = to.x - from.x; const dy = to.y - from.y;
+              const fx = (dx > 0 ? (from.x + from.width) : from.x); const fy = (from.y + from.height / 2);
+              const tx = (dx > 0 ? to.x : (to.x + to.width)); const ty = (to.y + to.height / 2);
+              const newPath: [number, number][] = [[fx, fy], [tx, fy], [tx, ty]];
+              setFactory((prev: any) => ({
+                 ...prev,
+                 flows: prev.flows.map((f: any) => f.id === flow.id ? { ...f, routingPoints: newPath } : f)
+              }));
+           }
+           return;
+         }
+       }
+    }
+
     dragRef.current = { type: 'pan', id: '', startX: e.clientX, startY: e.clientY, itemStartX: viewState.panX, itemStartY: viewState.panY } as any;
-    setSelectedWcId(null);
+    setSelectedWcId(null); setSelectedFlowId(null);
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
@@ -790,6 +884,29 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
         let collision = false;
         area.lines[0].workCenters.forEach((other: any) => { if (other.id !== id) { const pad = 20; if (targetX < other.x + other.width + pad && targetX + wc.width > other.x - pad && targetY < other.y + other.height + pad && targetY + wc.height > other.y - pad) collision = true; } });
         if (!collision) { wc.x = Math.max(area.x, Math.min(area.x + area.width - wc.width, targetX)); wc.y = Math.max(area.y, Math.min(area.y + area.height - wc.height, targetY)); updateFactory(newFactory, false); }
+      }
+    } else if (type === 'waypoint' && !isAdmin && !readOnly && !isPublicView) {
+      const flowId = (dragRef.current as any).flowId;
+      const wpIndex = (dragRef.current as any).wpIndex;
+      if (flowId !== undefined && wpIndex !== undefined) {
+        const newFactory = { ...factory };
+        const flow = newFactory.flows.find((f: any) => f.id === flowId);
+        if (flow && flow.routingPoints) {
+           const nx = Math.round((itemStartX + dx) / 20) * 20;
+           const ny = Math.round((itemStartY + dy) / 20) * 20;
+           if (wpIndex > 0 && wpIndex < flow.routingPoints.length - 1) {
+              const newPts = [...flow.routingPoints];
+              newPts[wpIndex] = [nx, ny];
+              const prev = newPts[wpIndex-1];
+              if (Math.abs(nx - prev[0]) < Math.abs(ny - prev[1])) {
+                 newPts[wpIndex][0] = prev[0];
+              } else {
+                 newPts[wpIndex][1] = prev[1];
+              }
+              flow.routingPoints = newPts;
+              updateFactory(newFactory, false);
+           }
+        }
       }
     }
   };
@@ -1101,6 +1218,30 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
                   <div className="pt-4 flex">
                     <Button onClick={() => { setSelectedWcId(null); setSelectedAreaId(null); }} className="w-full rounded-2xl bg-white text-slate-900 border border-slate-200 font-black uppercase text-[10px] tracking-widest h-12 hover:bg-slate-50 shadow-sm transition-all active:scale-[0.98]">Done Editing</Button>
                   </div>
+                </div>
+              </div>
+            )}
+            
+            {selectedFlowId && (
+              <div className="bg-sky-900 rounded-3xl p-6 shadow-2xl animate-in fade-in slide-in-from-left-4 duration-300 border border-sky-800">
+                <div className="flex items-center gap-3 mb-6"><div className="p-2.5 rounded-xl bg-white/10 text-white shadow-inner"><Navigation className="h-5 w-5" /></div><div><h4 className="text-sm font-black text-white uppercase tracking-tight">Flow Routing</h4><p className="text-[10px] text-sky-400 font-bold uppercase tracking-widest">Manual Path Editor</p></div></div>
+                <div className="space-y-4">
+                  <p className="text-[11px] text-slate-400 font-medium leading-relaxed">
+                    Interactive path editing enabled. Drag the <span className="text-sky-400 font-bold">blue handles</span> on the arrow to adjust the routing. 
+                    End-points remain locked to workstations.
+                  </p>
+                  <Button 
+                    onClick={() => {
+                      setFactory((prev: any) => ({
+                        ...prev,
+                        flows: prev.flows.map((f: any) => f.id === selectedFlowId ? { ...f, routingPoints: undefined } : f)
+                      }));
+                      setSelectedFlowId(null);
+                    }} 
+                    className="w-full rounded-2xl bg-white text-sky-900 border border-sky-200 font-black uppercase text-[10px] tracking-widest h-12 hover:bg-sky-50 shadow-sm transition-all active:scale-[0.98]"
+                  >
+                    Reset to Auto-Route
+                  </Button>
                 </div>
               </div>
             )}

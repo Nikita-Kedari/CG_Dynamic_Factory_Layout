@@ -1165,7 +1165,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
         body: JSON.stringify({ 
           admin_comments: adminComment, 
           adminComments: adminComment, // Compatibility with local store
-          status: action === 'push' ? 'pushed' : (action === 'reject' ? 'rejected' : 'approved'),
+          status: (action === 'push' || action === 'reject') ? 'rejected' : 'approved',
           reviewedBy: 'Admin',
           reviewed_by: 'Admin'
         })
@@ -1173,7 +1173,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
 
       if (res.ok) {
         let msg = "Action successful!";
-        if (action === 'push') msg = "Layout pushed back to developer with feedback!";
+        if (action === 'push') msg = "Layout rejected and sent back to developer with feedback!";
         else if (action === 'approve') msg = "Layout officially approved!";
         else if (action === 'reject') msg = "Layout rejected.";
         

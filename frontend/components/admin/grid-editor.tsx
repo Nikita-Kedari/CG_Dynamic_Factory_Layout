@@ -1148,6 +1148,9 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
 
   const handleReviewAction = async (action: 'approve' | 'reject' | 'push') => {
     if (!layoutId) return alert("No Layout ID found for this session.");
+    if (action === 'push' && !adminComment.trim()) {
+      return alert("Please provide architectural feedback or comments before pushing back to the developer.");
+    }
     try {
       const endpoint = action === 'push' ? 'comment' : action;
       

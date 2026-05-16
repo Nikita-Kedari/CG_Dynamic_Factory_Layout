@@ -120,18 +120,37 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     return () => clearInterval(intv);
   }, []);
 
-  // 2. Fetch Live Data (Values from SQL Rows)
+  // 2. Fetch Live Data (Values from SQL Rows) & Initialize if needed
   useEffect(() => {
+    if (!layoutId) return;
+
     const fetchAll = async () => {
       try {
-        const res = await fetch('http://localhost:4000/api/parameters/data');
-        if (res.ok) setDynamicWorkstationData(await res.json());
+        const res = await fetch(`http://localhost:4000/api/parameters/data?layoutId=${layoutId}`);
+        if (res.ok) {
+          setDynamicWorkstationData(await res.json());
+        }
       } catch (err) {}
     };
+
+    const initializeParams = async () => {
+      if (!factory?.areas) return;
+      const allWcs = factory.areas.flatMap((a: any) => a.lines.flatMap((l: any) => l.workCenters));
+      try {
+        await fetch('http://localhost:4000/api/parameters/initialize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ layoutId, workstations: allWcs })
+        });
+        fetchAll(); // Refresh after init
+      } catch (err) {}
+    };
+
+    initializeParams();
     fetchAll();
-    const interval = setInterval(fetchAll, 10000); // 10 second polling as requested
+    const interval = setInterval(fetchAll, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [layoutId, factory]);
 
   const allFilters = [
     { id: 'ws_id', label: 'Workstation ID', description: 'Unique identifier' },
@@ -761,7 +780,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
           <div className="space-y-4">{allFilters.map(f => (<label key={f.id} className="flex items-start gap-4 p-2 hover:bg-[#1e293b]/50 rounded-xl cursor-pointer transition-colors group"><input type="checkbox" checked={activeFilterIds[f.id]} onChange={() => setActiveFilterIds(p => ({ ...p, [f.id]: !p[f.id] }))} className="mt-0.5 h-4.5 w-4.5 accent-indigo-500 rounded border-slate-700 bg-slate-900" /><div className="flex flex-col gap-0.5"><span className="text-[12px] font-bold text-slate-200 group-hover:text-white">{f.label}</span><span className="text-[10px] text-slate-500">{f.description}</span></div></label>))}</div>
         </div>
         <div className="absolute top-0 left-0 right-0 z-20 flex justify-between p-8 bg-gradient-to-b from-[#060b14] via-[#060b14]/80 to-transparent">
-          <div className="flex items-center gap-8"><Button onClick={() => window.location.href = isPublicView ? '/' : '/admin'} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155] transition-all active:scale-95"><ArrowLeft className="mr-3 h-5 w-5" /> {isPublicView ? 'Exit View' : 'Back to Console'}</Button><div className="h-10 w-px bg-slate-800"></div><div><h2 className="text-white font-bold text-2xl tracking-tight mb-1">{factory?.name || 'Blueprint Reviewer'}</h2><p className="text-indigo-400 text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-2"><CheckCircle2 className="h-3 w-3" /> {isPublicView ? 'Public Shared View' : 'Mandatory Review Mode (View Only)'}</p></div></div>
+          <div className="flex items-center gap-8"><Button onClick={() => window.location.href = isPublicView ? '/' : '/admin'} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155] transition-all active:scale-95"><ArrowLeft className="mr-3 h-5 w-5" /> {isPublicView ? 'Exit View' : 'Back to Console'}</Button><div className="h-10 w-px bg-slate-800"></div><div><h2 className="text-white font-bold text-2xl tracking-tight mb-1">{factory?.name || 'Blueprint Reviewer'} <span className="text-slate-500 font-medium ml-2">ID-{layoutId}</span></h2><p className="text-indigo-400 text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-2"><CheckCircle2 className="h-3 w-3" /> {isPublicView ? 'Public Shared View' : 'Mandatory Review Mode (View Only)'}</p></div></div>
           <div className="flex gap-4"><Button onClick={() => navigator.clipboard.writeText(getShareUrl()).then(() => setShareMsg(true))} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155]">{shareMsg ? 'Link Copied ✓' : 'Share URL'}</Button><Button onClick={() => window.print()} className="bg-indigo-600 text-white rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-indigo-700 transition-all">Download Blueprint</Button></div>
         </div>
         {!isPublicView && isAdmin && (
@@ -778,7 +797,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     <div className="flex h-full w-full flex-col bg-[#f8fafc] font-sans">
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center gap-4 shadow-sm z-30">
         <div className="flex items-center gap-3"><LayoutGrid className="h-6 w-6 text-slate-700" /><span className="text-lg font-black text-slate-800 uppercase tracking-tighter">Layout Editor</span></div>
-        <div className="h-6 w-px bg-slate-200 mx-2"></div><span className="text-sm font-bold text-slate-500">{factory?.name}</span><div className="flex-1" /><Button onClick={() => { if (onSave) onSave(factory); setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2000); }} className="bg-slate-800 hover:bg-slate-900 text-white font-bold h-11 px-8 rounded-xl shadow-lg shadow-slate-100"><Save className="h-4 w-4 mr-2" /> {savedMsg ? 'Layout Saved!' : 'Save Layout'}</Button>
+        <div className="h-6 w-px bg-slate-200 mx-2"></div><span className="text-sm font-bold text-slate-500">{factory?.name}</span><div className="flex-1" /><div className="mr-4 px-4 py-1.5 bg-slate-100 rounded-lg border border-slate-200"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2">Layout ID-</span><span className="text-xs font-bold text-slate-600">{layoutId}</span></div><Button onClick={() => { if (onSave) onSave(factory); setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2000); }} className="bg-slate-800 hover:bg-slate-900 text-white font-bold h-11 px-8 rounded-xl shadow-lg shadow-slate-100"><Save className="h-4 w-4 mr-2" /> {savedMsg ? 'Layout Saved!' : 'Save Layout'}</Button>
       </div>
 
       <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 flex items-center gap-3 z-30">

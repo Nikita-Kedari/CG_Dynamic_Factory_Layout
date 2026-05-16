@@ -38,7 +38,7 @@ async function syncParametersToXML() {
   `);
 
   const dbColumns = result.recordset
-    .filter(c => !['ws_parameter_id', 'ws_id', 'WS_Parameter_ID', 'WS_ID'].includes(c.COLUMN_NAME))
+    .filter(c => !['ws_parameter_id', 'ws_id', 'WS_Parameter_ID', 'WS_ID', 'layout_version_id'].includes(c.COLUMN_NAME.toLowerCase()))
     .map(c => ({
       id: c.COLUMN_NAME.toLowerCase(),
       label: c.COLUMN_NAME,
@@ -113,16 +113,22 @@ router.get('/', async (req, res) => {
 
 /**
  * GET /api/parameters/data
+ * Fetches parameter values filtered by Layout ID
  */
 router.get('/data', async (req, res) => {
   try {
+    const { layoutId } = req.query;
+    if (!layoutId) return res.status(400).json({ error: 'layoutId is required' });
+
     const pool = await getPool();
-    const result = await pool.request().query('SELECT * FROM WORKSTATION_Parameters');
+    const result = await pool.request()
+      .input('lid', sql.Int, parseInt(layoutId))
+      .query('SELECT * FROM WORKSTATION_Parameters WHERE layout_version_id = @lid');
+    
     const data = {};
     result.recordset.forEach(row => {
       const wsKey = row.WS_ID || row.ws_id;
       if (wsKey) {
-        // Convert all keys to lowercase for the frontend
         const normalizedRow = {};
         Object.keys(row).forEach(key => {
           normalizedRow[key.toLowerCase()] = row[key];
@@ -131,6 +137,44 @@ router.get('/data', async (req, res) => {
       }
     });
     res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/parameters/initialize
+ * Automatically seeds the database with default parameters for all workstations in a layout
+ */
+router.post('/initialize', async (req, res) => {
+  const { layoutId, workstations } = req.body;
+  if (!layoutId || !workstations) return res.status(400).json({ error: 'layoutId and workstations array required' });
+
+  try {
+    const pool = await getPool();
+    
+    // Get existing WS_IDs for this layout to avoid duplicates
+    const existingRes = await pool.request()
+      .input('lid', sql.Int, parseInt(layoutId))
+      .query('SELECT ws_id FROM WORKSTATION_Parameters WHERE layout_version_id = @lid');
+    const existingIds = new Set(existingRes.recordset.map(r => r.ws_id.toLowerCase()));
+
+    let createdCount = 0;
+    for (const ws of workstations) {
+      const id = (ws.workCenterId || ws.name || ws.id).toLowerCase();
+      if (!existingIds.has(id)) {
+        await pool.request()
+          .input('lid', sql.Int, parseInt(layoutId))
+          .input('wsid', sql.VarChar, id)
+          .query(`
+            INSERT INTO WORKSTATION_Parameters (layout_version_id, ws_id, status, oee, orders)
+            VALUES (@lid, @wsid, 'Running', '0', 'N/A')
+          `);
+        createdCount++;
+      }
+    }
+    
+    res.json({ success: true, initialized: createdCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

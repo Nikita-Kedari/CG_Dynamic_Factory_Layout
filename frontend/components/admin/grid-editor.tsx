@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ZoomIn, ZoomOut, Maximize2, Grid3x3, Undo2, Redo2, RotateCcw, Save, ArrowLeft, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity, AlertCircle, CheckSquare, CheckCircle2, XCircle, Send, Search, Checkbox, Plus, Trash2, FileImage, FileType } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Grid3x3, Undo2, Redo2, RotateCcw, Save, ArrowLeft, ArrowRight, Minus, CornerDownRight, Navigation, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity, AlertCircle, CheckSquare, CheckCircle2, XCircle, Send, Search, Checkbox, Plus, Trash2, FileImage, FileType } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { jsPDF } from 'jspdf';
 import {
@@ -937,14 +937,23 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
          const newFactory = { ...factory };
          const flow = newFactory.flows.find((f: any) => f.id === flowId);
          if (flow && flow.routingPoints) {
-            const newPts = [...flow.routingPoints];
-            const p1 = newPts[segIndex]; const p2 = newPts[segIndex+1];
-            const dx_grid = Math.round(dx / 20) * 20;
-            const dy_grid = Math.round(dy / 20) * 20;
+            const newPts = [...flow.routingPoints.map((p: any) => [...p])];
+            const p1 = newPts[segIndex];
+            const p2 = newPts[segIndex+1];
+            
+            const isVertical = Math.abs(p1[0] - p2[0]) < 1; // Tolerance for floats
 
-            // Move both ends of the segment (preserving orientation)
-            if (segIndex > 0) newPts[segIndex] = [Math.round((itemStartX + dx) / 20) * 20, Math.round((itemStartY + dy) / 20) * 20];
-            if (segIndex + 1 < newPts.length - 1) newPts[segIndex+1] = [Math.round((p2[0] + dx_grid)), Math.round((p2[1] + dy_grid))];
+            if (isVertical) {
+               // Move segment horizontally (adjust distance)
+               const nx = Math.round((itemStartX + dx) / 20) * 20;
+               if (segIndex > 0) newPts[segIndex][0] = nx;
+               if (segIndex + 1 < newPts.length - 1) newPts[segIndex+1][0] = nx;
+            } else {
+               // Move segment vertically (adjust distance)
+               const ny = Math.round((itemStartY + dy) / 20) * 20;
+               if (segIndex > 0) newPts[segIndex][1] = ny;
+               if (segIndex + 1 < newPts.length - 1) newPts[segIndex+1][1] = ny;
+            }
             
             flow.routingPoints = newPts;
             updateFactory(newFactory, false);

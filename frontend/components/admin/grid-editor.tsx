@@ -311,15 +311,49 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
 
   const downloadBlueprint = async (format: 'png' | 'pdf') => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !factory?.areas) return;
     
-    // Save current view state
     const originalViewState = { ...viewState };
     
-    // Fit to screen for the capture
-    handleFitToScreen();
+    // 1. Calculate the actual bounding box of the physical layout (areas)
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    factory.areas.forEach((a: any) => {
+      minX = Math.min(minX, a.x);
+      minY = Math.min(minY, a.y);
+      maxX = Math.max(maxX, a.x + a.width);
+      maxY = Math.max(maxY, a.y + a.height);
+    });
+
+    if (minX !== Infinity) {
+      const layoutW = maxX - minX;
+      const layoutH = maxY - minY;
+      const margin = 40; // Approximately 1cm (38-40px)
+      
+      // Calculate scale to fit the bounding box into the canvas with a tight margin
+      const scale = Math.min(
+        (canvas.width - margin * 2) / layoutW,
+        (canvas.height - margin * 2) / layoutH
+      );
+      
+      const captureZoom = Math.max(0.1, Math.min(scale, 3.0));
+      
+      // Calculate pan to center the bounding box
+      const capturePanX = (canvas.width - layoutW * captureZoom) / 2 - minX * captureZoom;
+      const capturePanY = (canvas.height - layoutH * captureZoom) / 2 - minY * captureZoom;
+
+      // Apply view state immediately for the capture
+      setViewState(prev => ({
+        ...prev,
+        zoom: captureZoom,
+        targetZoom: captureZoom,
+        panX: capturePanX,
+        targetPanX: capturePanX,
+        panY: capturePanY,
+        targetPanY: capturePanY
+      }));
+    }
     
-    // Wait for animation to finish settling
+    // Wait for the render loop to settle on the new view
     setTimeout(() => {
       if (format === 'png') {
         const link = document.createElement('a');
@@ -337,9 +371,9 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
         pdf.save(`${factory.name || 'factory_layout'}.pdf`);
       }
       
-      // Restore view state
+      // Restore user's previous view
       setViewState(originalViewState);
-    }, 800);
+    }, 1000);
   };
 
   const getShareUrl = () => {

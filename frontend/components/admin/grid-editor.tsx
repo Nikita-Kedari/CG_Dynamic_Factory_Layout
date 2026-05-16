@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { ZoomIn, ZoomOut, Maximize2, Grid3x3, Undo2, Redo2, RotateCcw, Save, ArrowLeft, ArrowRight, Minus, CornerDownRight, Navigation, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity, AlertCircle, CheckSquare, CheckCircle2, XCircle, Send, Search, Checkbox, Plus, Trash2, FileImage, FileType } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { jsPDF } from 'jspdf';
@@ -93,6 +93,14 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   const [isCapturing, setIsCapturing] = useState(false);
   const [adminComment, setAdminComment] = useState('');
   
+  const allWcs = useMemo(() => {
+    const map: Record<string, any> = {};
+    (factory?.areas || []).forEach((a: any) => (a.lines || []).forEach((l: any) => (l.workCenters || []).forEach((w: any) => {
+      map[w.id] = { ...w, area: a };
+    })));
+    return map;
+  }, [factory]);
+
   // Dynamic Parameters State
   const [availableParameters, setAvailableParameters] = useState<any[]>([]);
   const [activeFilterIds, setActiveFilterIds] = useState<Record<string, boolean>>({ ws_id: true });
@@ -484,10 +492,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       drawArrowhead(realLast.x, realLast.y, angle, color);
     };
 
-    const allWcs: Record<string, any> = {};
-    factory.areas.forEach((a: any) => a.lines.forEach((l: any) => l.workCenters.forEach((w: any) => {
-      allWcs[w.id] = { ...w, area: a };
-    })));
+
 
     factory.areas.forEach((area: any) => {
       const ax = area.x * zoom + panX; const ay = area.y * zoom + panY;

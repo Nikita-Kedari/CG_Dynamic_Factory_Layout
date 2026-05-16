@@ -534,8 +534,10 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
           
           if (activeFilterIds['ws_id']) { 
             ctx.fillStyle = '#ffffff'; 
-            ctx.font = `bold ${Math.max(12, 36 * zoom)}px Inter`; 
-            if (zoom < 0.4) ctx.font = `bold ${Math.max(20, 48 * zoom)}px Inter`;
+            // Remove Math.max floor during capture to maintain proportions
+            const idFontSize = isCapturing ? (36 * zoom) : Math.max(12, 36 * zoom);
+            ctx.font = `bold ${idFontSize}px Inter`; 
+            if (zoom < 0.4 && !isCapturing) ctx.font = `bold ${Math.max(20, 48 * zoom)}px Inter`;
             ctx.fillText(wsIdText, wx + ww / 2, wy + wh / 2); 
           }
           
@@ -546,12 +548,10 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
              const cardW = 180 * zoom; 
              const cardH = 100 * zoom;
              const padding = 12 * zoom;
-             // Position to the right of the workstation box
              const cx = wx + ww + 10 * zoom; 
              const cy = wy;
 
              ctx.save();
-             // Glassmorphism effect
              ctx.shadowBlur = 15 * zoom; ctx.shadowColor = 'rgba(0,0,0,0.3)';
              ctx.fillStyle = isHovered ? 'rgba(30, 41, 59, 0.98)' : 'rgba(15, 23, 42, 0.85)';
              roundRect(ctx, cx, cy, cardW, cardH, 12 * zoom); ctx.fill();
@@ -559,14 +559,13 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
              ctx.lineWidth = 1.5 * zoom; ctx.stroke();
              ctx.restore();
 
-             // Card Header (ID + Status Dot)
-             ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.max(10, 16 * zoom)}px Inter`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+             // Card Header
+             const headerFS = isCapturing ? (16 * zoom) : Math.max(10, 16 * zoom);
+             ctx.fillStyle = '#fff'; ctx.font = `bold ${headerFS}px Inter`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
              ctx.fillText(wsIdText, cx + padding, cy + padding);
              
-             // Status Indicator Dot
              ctx.fillStyle = color; ctx.beginPath(); ctx.arc(cx + cardW - padding - 4*zoom, cy + padding + 6*zoom, 4 * zoom, 0, Math.PI*2); ctx.fill();
              
-             // Parameters List inside card
              let tyOff = padding + 22 * zoom;
              const visibleParams = availableParameters.filter(p => activeFilterIds[p.id]);
              
@@ -574,10 +573,11 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
                const v = excelData?.[p.id] || 'N/A';
                const displayVal = (p.id === 'oee') ? `${v}%` : v.toString();
                
-               ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = `600 ${Math.max(8, 11 * zoom)}px Inter`;
+               const labelFS = isCapturing ? (11 * zoom) : Math.max(8, 11 * zoom);
+               ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = `600 ${labelFS}px Inter`;
                ctx.fillText(`${p.label}:`, cx + padding, cy + tyOff);
                
-               ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.max(8, 11 * zoom)}px Inter`;
+               ctx.fillStyle = '#fff'; ctx.font = `bold ${labelFS}px Inter`;
                const labelWidth = ctx.measureText(`${p.label}:`).width;
                ctx.fillText(displayVal, cx + padding + labelWidth + 5*zoom, cy + tyOff);
                

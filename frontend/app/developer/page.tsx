@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload, Download, FileText, CheckCircle, AlertCircle, LogOut } from 'lucide-react';
-import { generateSampleCSV } from '@/lib/csv-handler';
 import { Factory } from '@/lib/types';
 import { logout } from '@/lib/auth';
 import { useRouter } from 'next/navigation';

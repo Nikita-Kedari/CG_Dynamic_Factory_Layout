@@ -69,7 +69,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   const containerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number>(0);
   const dragRef = useRef<{ 
-    type: 'pan' | 'wc' | 'area' | 'waypoint', 
+    type: 'pan' | 'wc' | 'area' | 'waypoint' | 'segment', 
     id: string, 
     areaId?: string, 
     startX: number, 
@@ -78,6 +78,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     itemStartY: number,
     flowId?: string,
     wpIndex?: number,
+    segIndex?: number,
     initialState?: any
   } | null>(null);
 
@@ -725,15 +726,27 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
 
       // Render Handles for selected flow
       if (flow.id === selectedFlowId && !isPublicView && !readOnly) {
+        // Render Waypoint Handles
         path.forEach((pt, idx) => {
-          ctx.beginPath();
-          ctx.arc(pt.x, pt.y, 6 * zoom, 0, Math.PI * 2);
-          ctx.fillStyle = '#38bdf8';
-          ctx.fill();
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 1.5 * zoom;
-          ctx.stroke();
+          ctx.beginPath(); ctx.arc(pt.x, pt.y, 5 * zoom, 0, Math.PI * 2);
+          ctx.fillStyle = '#fff'; ctx.fill();
+          ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2 * zoom; ctx.stroke();
         });
+
+        // Render Mid-Segment "Move" Handles
+        for (let i = 0; i < path.length - 1; i++) {
+          const p1 = path[i]; const p2 = path[i+1];
+          const mx = (p1.x + p2.x) / 2; const my = (p1.y + p2.y) / 2;
+          
+          ctx.save();
+          ctx.fillStyle = '#38bdf8';
+          ctx.beginPath(); ctx.arc(mx, my, 4 * zoom, 0, Math.PI * 2); ctx.fill();
+          // Draw a small drag icon hint
+          ctx.strokeStyle = '#fff'; ctx.lineWidth = 1 * zoom;
+          ctx.beginPath(); ctx.moveTo(mx - 3*zoom, my); ctx.lineTo(mx + 3*zoom, my); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(mx, my - 3*zoom); ctx.lineTo(mx, my + 3*zoom); ctx.stroke();
+          ctx.restore();
+        }
       }
     });
   }, [factory, viewState, showGrid, activeFilterIds, dynamicWorkstationData, selectedAreaId, selectedWcId, isAdmin, isPublicView, hoveredWcId, isCapturing]);
@@ -763,16 +776,25 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     
     const initialState = JSON.parse(JSON.stringify(factory));
 
-    // 1. Check Waypoint Handles (If a flow is already selected)
+    // 1. Check Handles (If a flow is already selected)
     if (selectedFlowId) {
       const flow = factory.flows.find((f: any) => f.id === selectedFlowId);
       if (flow && flow.routingPoints) {
+        // Waypoints
         for (let i = 0; i < flow.routingPoints.length; i++) {
           const pt = flow.routingPoints[i];
-          const dist = Math.sqrt((worldX - pt[0])**2 + (worldY - pt[1])**2);
-          if (dist < 10) { // 10 world unit tolerance
+          if (Math.sqrt((worldX - pt[0])**2 + (worldY - pt[1])**2) < 12) {
             dragRef.current = { type: 'waypoint', id: flow.id, flowId: flow.id, wpIndex: i, startX: e.clientX, startY: e.clientY, itemStartX: pt[0], itemStartY: pt[1], initialState };
             return;
+          }
+        }
+        // Segments
+        for (let i = 0; i < flow.routingPoints.length - 1; i++) {
+          const p1 = flow.routingPoints[i]; const p2 = flow.routingPoints[i+1];
+          const mx = (p1[0] + p2[0]) / 2; const my = (p1[1] + p2[1]) / 2;
+          if (Math.sqrt((worldX - mx)**2 + (worldY - my)**2) < 12) {
+             dragRef.current = { type: 'segment', id: flow.id, flowId: flow.id, segIndex: i, startX: e.clientX, startY: e.clientY, itemStartX: p1[0], itemStartY: p1[1], initialState };
+             return;
           }
         }
       }
@@ -908,6 +930,26 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
            }
         }
       }
+    } else if (type === 'segment' && !isAdmin && !readOnly && !isPublicView) {
+       const flowId = (dragRef.current as any).flowId;
+       const segIndex = (dragRef.current as any).segIndex;
+       if (flowId !== undefined && segIndex !== undefined) {
+         const newFactory = { ...factory };
+         const flow = newFactory.flows.find((f: any) => f.id === flowId);
+         if (flow && flow.routingPoints) {
+            const newPts = [...flow.routingPoints];
+            const p1 = newPts[segIndex]; const p2 = newPts[segIndex+1];
+            const dx_grid = Math.round(dx / 20) * 20;
+            const dy_grid = Math.round(dy / 20) * 20;
+
+            // Move both ends of the segment (preserving orientation)
+            if (segIndex > 0) newPts[segIndex] = [Math.round((itemStartX + dx) / 20) * 20, Math.round((itemStartY + dy) / 20) * 20];
+            if (segIndex + 1 < newPts.length - 1) newPts[segIndex+1] = [Math.round((p2[0] + dx_grid)), Math.round((p2[1] + dy_grid))];
+            
+            flow.routingPoints = newPts;
+            updateFactory(newFactory, false);
+         }
+       }
     }
   };
 
@@ -1273,6 +1315,45 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
             <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter"><Search className="h-4 w-4 text-slate-400" /> Zoom: Scroll</div><div className="h-4 w-px bg-slate-200"></div>
             <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter"><Maximize2 className="h-4 w-4 text-slate-400" /> Move Machine: Drag Inside Area</div>
           </div>
+
+          {selectedFlowId && (
+            <div className="absolute bottom-24 left-8 flex items-center gap-2 px-3 py-2 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 shadow-xl z-30 animate-in slide-in-from-bottom-4 duration-300">
+              <Button 
+                variant="ghost" size="icon" className="h-8 w-8 text-slate-600 hover:bg-slate-100 rounded-lg"
+                onClick={() => {
+                  setFactory((prev: any) => ({
+                    ...prev,
+                    flows: prev.flows.map((f: any) => {
+                      if (f.id === selectedFlowId) {
+                         // Simplify to straight line between endpoints
+                         const from = allWcs[f.fromWsId]; const to = allWcs[f.toWsId];
+                         return { ...f, routingPoints: [[from.x + from.width/2, from.y + from.height/2], [to.x + to.width/2, to.y + to.height/2]] };
+                      }
+                      return f;
+                    })
+                  }));
+                }}
+              >
+                <Minus className="h-4 w-4" />
+              </Button>
+              <div className="w-px h-4 bg-slate-200" />
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600 hover:bg-slate-100 rounded-lg"><ArrowRight className="h-4 w-4" /></Button>
+              <div className="w-px h-4 bg-slate-200" />
+              <Button 
+                variant="ghost" size="icon" className="h-8 w-8 text-slate-600 hover:bg-slate-100 rounded-lg"
+                onClick={() => {
+                   // Resetting to auto-route effectively gives the 'Step' look
+                   setFactory((prev: any) => ({
+                      ...prev,
+                      flows: prev.flows.map((f: any) => f.id === selectedFlowId ? { ...f, routingPoints: undefined } : f)
+                   }));
+                   setSelectedFlowId(null);
+                }}
+              >
+                <CornerDownRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>

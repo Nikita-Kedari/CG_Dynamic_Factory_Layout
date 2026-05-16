@@ -15,9 +15,4 @@
     <label>Status</label>
     <type>varchar</type>
   </parameter>
-  <parameter visible="true">
-    <id>layout_version_id</id>
-    <label>layout_version_id</label>
-    <type>int</type>
-  </parameter>
 </parameters>

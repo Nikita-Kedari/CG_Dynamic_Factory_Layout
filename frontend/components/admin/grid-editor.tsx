@@ -531,91 +531,59 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
           roundRect(ctx, wx, wy, ww, wh, 8 * zoom); ctx.fill(); ctx.stroke();
 
           // --- ADAPTIVE PARAMETER RENDERING ---
-          // Level 1: Extreme Zoom Out (< 0.4) - Just the ID inside
-          // Level 2: Medium Zoom (0.4 - 0.8) - ID inside, Status/OEE below
-          // Level 3: High Zoom (> 0.8) - Detailed parameters with labels
-          
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
           const wsIdText = wc.workCenterId || wc.name || '';
           
           if (activeFilterIds['ws_id']) { 
             ctx.fillStyle = '#ffffff'; 
             ctx.font = `bold ${Math.max(12, 36 * zoom)}px Inter`; 
-            // If very zoomed out, make ID even more prominent
             if (zoom < 0.4) ctx.font = `bold ${Math.max(20, 48 * zoom)}px Inter`;
             ctx.fillText(wsIdText, wx + ww / 2, wy + wh / 2); 
           }
           
-          // Render Parameters below the box
-          if (zoom > 0.4 || isHovered) {
-            let yOff = wh + 12 * zoom;
-            const paramsToRender = availableParameters.filter(p => activeFilterIds[p.id]);
-            
-            paramsToRender.forEach((param, pIdx) => {
-              // Density control: Only show OEE/Status if zoomed out
-              if (zoom < 0.7 && !isHovered && !['oee', 'status'].includes(param.id)) return;
-              
-              const val = excelData?.[param.id];
-              const displayVal = (val === undefined || val === null) ? 'null' : val;
-              
-              const fontSize = Math.max(7, (zoom > 1.2 ? 13 : 11) * zoom);
-              ctx.font = `${param.id === 'oee' ? 'bold' : '500'} ${fontSize}px Inter`;
-              
-              let dLabel = param.id === 'oee' ? `${displayVal}% OEE` : (param.id === 'status' ? displayVal.toUpperCase() : `${param.label}: ${displayVal}`);
-              
-              ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-              
-              // Highlight colors for status
-              if (param.id === 'status') {
-                const s = displayVal.toLowerCase();
-                ctx.fillStyle = s === 'idle' ? '#fbbf24' : (s === 'down' ? '#f87171' : '#34d399');
-              } else {
-                ctx.fillStyle = isHovered ? '#fff' : 'rgba(255, 255, 255, 0.6)';
-              }
+          // --- PERSISTENT SIDE-CARD RENDERING (When Zoomed In or Hovered) ---
+          const shouldShowCard = zoom > 0.8 || isHovered;
+          
+          if (shouldShowCard) {
+             const cardW = 180 * zoom; 
+             const cardH = 100 * zoom;
+             const padding = 12 * zoom;
+             // Position to the right of the workstation box
+             const cx = wx + ww + 10 * zoom; 
+             const cy = wy;
 
-              // Draw interactive card if hovered
-              if (isHovered) {
-                const metrics = ctx.measureText(dLabel.toString());
-                const padding = 6 * zoom;
-                ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-                roundRect(ctx, wx + ww/2 - metrics.width/2 - padding, wy + yOff - 2*zoom, metrics.width + padding*2, fontSize + padding, 6*zoom);
-                ctx.fill();
-                ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1; ctx.stroke();
-                ctx.fillStyle = '#fff';
-              }
-
-              ctx.fillText(dLabel.toString(), wx + ww / 2, wy + yOff);
-              yOff += (fontSize + 6 * zoom);
-            });
-          }
-
-          // Render High-Detail Tooltip on Hover
-          if (isHovered) {
-             const tipW = 200; const tipH = 120;
-             const tx = wx + ww + 15; const ty = wy;
-             
              ctx.save();
-             ctx.shadowBlur = 20; ctx.shadowColor = 'rgba(0,0,0,0.5)';
-             ctx.fillStyle = 'rgba(30, 41, 59, 0.95)';
-             roundRect(ctx, tx, ty, tipW, tipH, 16); ctx.fill();
-             ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2; ctx.stroke();
+             // Glassmorphism effect
+             ctx.shadowBlur = 15 * zoom; ctx.shadowColor = 'rgba(0,0,0,0.3)';
+             ctx.fillStyle = isHovered ? 'rgba(30, 41, 59, 0.98)' : 'rgba(15, 23, 42, 0.85)';
+             roundRect(ctx, cx, cy, cardW, cardH, 12 * zoom); ctx.fill();
+             ctx.strokeStyle = isHovered ? '#38bdf8' : 'rgba(255,255,255,0.15)'; 
+             ctx.lineWidth = 1.5 * zoom; ctx.stroke();
              ctx.restore();
+
+             // Card Header (ID + Status Dot)
+             ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.max(10, 16 * zoom)}px Inter`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+             ctx.fillText(wsIdText, cx + padding, cy + padding);
              
-             ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Inter'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-             ctx.fillText(wsIdText, tx + 15, ty + 15);
+             // Status Indicator Dot
+             ctx.fillStyle = color; ctx.beginPath(); ctx.arc(cx + cardW - padding - 4*zoom, cy + padding + 6*zoom, 4 * zoom, 0, Math.PI*2); ctx.fill();
              
-             ctx.fillStyle = color; ctx.beginPath(); ctx.arc(tx + tipW - 20, ty + 22, 5, 0, Math.PI*2); ctx.fill();
+             // Parameters List inside card
+             let tyOff = padding + 22 * zoom;
+             const visibleParams = availableParameters.filter(p => activeFilterIds[p.id]);
              
-             ctx.font = '500 11px Inter'; ctx.fillStyle = '#94a3b8';
-             ctx.fillText('Real-time Metrics', tx + 15, ty + 35);
-             
-             let tyOff = 55;
-             availableParameters.slice(0, 4).forEach(p => {
+             visibleParams.slice(0, 4).forEach(p => {
                const v = excelData?.[p.id] || 'N/A';
-               ctx.fillStyle = '#cbd5e1'; ctx.font = '600 11px Inter';
-               ctx.fillText(`${p.label}:`, tx + 15, ty + tyOff);
-               ctx.fillStyle = '#fff'; ctx.fillText(v.toString(), tx + 100, ty + tyOff);
-               tyOff += 18;
+               const displayVal = (p.id === 'oee') ? `${v}%` : v.toString();
+               
+               ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = `600 ${Math.max(8, 11 * zoom)}px Inter`;
+               ctx.fillText(`${p.label}:`, cx + padding, cy + tyOff);
+               
+               ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.max(8, 11 * zoom)}px Inter`;
+               const labelWidth = ctx.measureText(`${p.label}:`).width;
+               ctx.fillText(displayVal, cx + padding + labelWidth + 5*zoom, cy + tyOff);
+               
+               tyOff += 16 * zoom;
              });
           }
         });

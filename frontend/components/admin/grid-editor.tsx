@@ -114,6 +114,36 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
   const [isEditing, setIsEditing] = useState(false);
   const editStartRef = useRef<any>(null);
 
+  const getFlowPoints = useCallback((flow: any, from: any, to: any, fIdx: number) => {
+    if (!from || !to) return [];
+    if (flow.routingPoints && flow.routingPoints.length >= 2) return flow.routingPoints;
+
+    const dx = to.x - from.x; const dy = to.y - from.y;
+    const isInternal = from.area?.id === to.area?.id;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const laneSpace = (fIdx % 6 + 1) * 20;
+
+    let fx, fy, tx, ty;
+    if (Math.abs(dx) > Math.abs(dy)) {
+      fx = (dx > 0 ? (from.x + from.width) : from.x); fy = (from.y + from.height / 2);
+      tx = (dx > 0 ? to.x : (to.x + to.width)); ty = (to.y + to.height / 2);
+    } else {
+      fx = (from.x + from.width / 2); fy = (dy > 0 ? (from.y + from.height) : from.y);
+      tx = (to.x + to.width / 2); ty = (dy > 0 ? to.y : (to.y + to.height));
+    }
+
+    const path: [number, number][] = [[fx, fy]];
+    if (isInternal || dist < 500) {
+      if (Math.abs(fy - ty) < 20 || Math.abs(fx - tx) < 20) path.push([tx, ty]);
+      else { path.push([tx, fy]); path.push([tx, ty]); }
+    } else {
+      const useTop = dy < 0; 
+      const perimeterY = useTop ? (from.area.y - 40 - laneSpace) : (from.area.y + from.area.height + 40 + laneSpace);
+      path.push([fx, perimeterY]); path.push([tx, perimeterY]); path.push([tx, ty]);
+    }
+    return path;
+  }, []);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -540,26 +570,24 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     }
 
     const drawArrowhead = (tx: number, ty: number, angle: number, color: string) => {
-      const size = 32 * zoom;
+      const size = 28 * zoom; // Slightly smaller for precision
       ctx.save(); ctx.translate(tx, ty); ctx.rotate(angle);
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-size, -size / 1.5); ctx.lineTo(-size * 0.75, 0); ctx.lineTo(-size, size / 1.5);
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-size, -size / 1.8); ctx.lineTo(-size * 0.7, 0); ctx.lineTo(-size, size / 1.8);
       ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.restore();
     };
 
-    const drawPathWithArrow = (points: {x: number, y: number}[], color: string, isDashed: boolean, targetSize: {w: number, h: number}) => {
+    const drawPathWithArrow = (points: {x: number, y: number}[], color: string, isDashed: boolean) => {
       if (points.length < 2) return;
       const last = points[points.length - 1]; const prev = points[points.length - 2];
       const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
-      const cos = Math.abs(Math.cos(angle)); const sin = Math.abs(Math.sin(angle));
-      const dist = Math.min((targetSize.w / 2) / cos, (targetSize.h / 2) / sin);
-      const realLast = { x: last.x - dist * Math.cos(angle), y: last.y - dist * Math.sin(angle) };
+      
       ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < points.length - 1; i++) { ctx.lineTo(points[i].x, points[i].y); }
-      ctx.lineTo(realLast.x, realLast.y);
+      for (let i = 1; i < points.length; i++) { ctx.lineTo(points[i].x, points[i].y); }
+      
       ctx.strokeStyle = color; ctx.lineWidth = 4 * zoom;
       if (isDashed) { ctx.setLineDash([16 * zoom, 12 * zoom]); ctx.lineDashOffset = -viewState.time * 35 * zoom; }
       ctx.stroke(); ctx.setLineDash([]);
-      drawArrowhead(realLast.x, realLast.y, angle, color);
+      drawArrowhead(last.x, last.y, angle, color);
     };
 
 
@@ -750,54 +778,10 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       const isInternal = from.area.id === to.area.id;
       const flowColor = flow.id === selectedFlowId ? '#38bdf8' : (isInternal ? '#fbbf24' : '#ef4444');
       
-      const dx = to.x - from.x;
-      const dy = to.y - from.y;
-      const dist = Math.sqrt(dx*dx + dy*dy);
-      
-      let fx, fy, tx, ty;
-      if (Math.abs(dx) > Math.abs(dy)) {
-        fx = (dx > 0 ? (from.x + from.width) : from.x) * zoom + panX;
-        fy = (from.y + from.height / 2) * zoom + panY;
-        tx = (dx > 0 ? to.x : (to.x + to.width)) * zoom + panX;
-        ty = (to.y + to.height / 2) * zoom + panY;
-      } else {
-        fx = (from.x + from.width / 2) * zoom + panX;
-        fy = (dy > 0 ? (from.y + from.height) : from.y) * zoom + panY;
-        tx = (to.x + to.width / 2) * zoom + panX;
-        ty = (dy > 0 ? to.y : (to.y + to.height)) * zoom + panY;
-      }
+      const flowPoints = getFlowPoints(flow, from, to, fIdx);
+      const path = flowPoints.map(pt => ({ x: pt[0] * zoom + panX, y: pt[1] * zoom + panY }));
 
-      let path: { x: number; y: number }[] = [];
-      
-      if (flow.routingPoints && flow.routingPoints.length >= 2) {
-        // Use manual routing points (scaled)
-        path = flow.routingPoints.map((pt: [number, number]) => ({
-          x: pt[0] * zoom + panX,
-          y: pt[1] * zoom + panY
-        }));
-      } else {
-        // Fallback to Auto-routing
-        path = [{ x: fx, y: fy }];
-        const laneSpace = (fIdx % 6 + 1) * 20 * zoom;
-        if (isInternal || dist < 500) {
-          if (Math.abs(fy - ty) < 20 || Math.abs(fx - tx) < 20) {
-            path.push({ x: tx, y: ty });
-          } else {
-            path.push({ x: tx, y: fy });
-            path.push({ x: tx, y: ty });
-          }
-        } else {
-          const useTop = dy < 0; 
-          const perimeterY = useTop 
-            ? (from.area.y - 40) * zoom + panY - laneSpace 
-            : (from.area.y + from.area.height + 40) * zoom + panY + laneSpace;
-          path.push({ x: fx, y: perimeterY });
-          path.push({ x: tx, y: perimeterY });
-          path.push({ x: tx, y: ty });
-        }
-      }
-
-      drawPathWithArrow(path, flowColor, true, { w: to.width * zoom, h: to.height * zoom });
+      drawPathWithArrow(path, flowColor, true);
 
       // Render Handles for selected flow
       if (flow.id === selectedFlowId && !isPublicView && !readOnly) {
@@ -888,33 +872,17 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     }
 
     // 3. Check Flow Lines & Arrowheads (Selection)
-    const allWcsMap: Record<string, any> = {};
-    factory.areas.forEach((a: any) => a.lines.forEach((l: any) => l.workCenters.forEach((w: any) => { allWcsMap[w.id] = w; })));
-    
     for (const flow of (factory.flows || [])) {
-       const from = allWcsMap[flow.fromWsId]; const to = allWcsMap[flow.toWsId];
+       const from = allWcs[flow.fromWsId]; const to = allWcs[flow.toWsId];
        if (!from || !to) continue;
 
-       let path: [number, number][] = [];
-       if (flow.routingPoints) {
-         path = flow.routingPoints;
-       } else {
-         const dx = to.x - from.x; const dy = to.y - from.y;
-         const fx = (dx > 0 ? (from.x + from.width) : from.x); const fy = (from.y + from.height / 2);
-         const tx = (dx > 0 ? to.x : (to.x + to.width)); const ty = (to.y + to.height / 2);
-         path = [[fx, fy], [tx, fy], [tx, ty]]; 
-       }
+       const flowIndex = factory.flows.indexOf(flow);
+       const path = getFlowPoints(flow, from, to, flowIndex);
 
        // --- Arrowhead Hit Detection ---
-       const last = path[path.length - 1]; const prev = path[path.length - 2];
-       if (last && prev) {
-          const angle = Math.atan2(last[1] - prev[1], last[0] - prev[0]);
-          const cos = Math.abs(Math.cos(angle)); const sin = Math.abs(Math.sin(angle));
-          const offsetDist = Math.min((to.width / 2) / cos, (to.height / 2) / sin);
-          const arrowTipX = last[0] - offsetDist * Math.cos(angle);
-          const arrowTipY = last[1] - offsetDist * Math.sin(angle);
-          
-          if (Math.sqrt((worldX - arrowTipX)**2 + (worldY - arrowTipY)**2) < 20) {
+       const last = path[path.length - 1]; 
+       if (last) {
+          if (Math.sqrt((worldX - last[0])**2 + (worldY - last[1])**2) < 25) {
              setSelectedFlowId(flow.id); setSelectedWcId(null); return;
           }
        }
@@ -926,17 +894,13 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
          const t = Math.max(0, Math.min(1, ((worldX-p1[0])*(p2[0]-p1[0]) + (worldY-p1[1])*(p2[1]-p1[1])) / l2));
          const dist = Math.sqrt((worldX - (p1[0] + t*(p2[0]-p1[0])))**2 + (worldY - (p1[1] + t*(p2[1]-p1[1])))**2);
          
-         if (dist < 15) { // Increased tolerance
+         if (dist < 15) {
            setSelectedFlowId(flow.id);
            setSelectedWcId(null);
            if (!flow.routingPoints) {
-              const dx = to.x - from.x; const dy = to.y - from.y;
-              const fx = (dx > 0 ? (from.x + from.width) : from.x); const fy = (from.y + from.height / 2);
-              const tx = (dx > 0 ? to.x : (to.x + to.width)); const ty = (to.y + to.height / 2);
-              const newPath: [number, number][] = [[fx, fy], [tx, fy], [tx, ty]];
               setFactory((prev: any) => ({
                  ...prev,
-                 flows: prev.flows.map((f: any) => f.id === flow.id ? { ...f, routingPoints: newPath } : f)
+                 flows: prev.flows.map((f: any) => f.id === flow.id ? { ...f, routingPoints: path } : f)
               }));
            }
            return;

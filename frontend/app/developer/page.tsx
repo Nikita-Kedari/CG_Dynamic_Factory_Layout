@@ -270,23 +270,21 @@ export default function DeveloperPage() {
                                                 <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">{l.status}</span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm align-top">
-                                            <div className="flex justify-end gap-2 text-slate-900">
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                                            <div className="flex justify-end gap-2">
+                                                <Link href={`/admin/editor?id=${l.id}`}>
+                                                    <Button variant="outline" size="sm" className="text-slate-700 border-slate-200 hover:bg-slate-50">
+                                                        {(!l.status || l.status === 'draft' || l.status === 'rejected' || l.status === 'pushed') ? 'Edit' : 'View'}
+                                                    </Button>
+                                                </Link>
                                                 {(!l.status || l.status === 'draft' || l.status === 'rejected' || l.status === 'pushed') && (
-                                                    <>
-                                                        <Link href={`/admin/editor?id=${l.id}`}>
-                                                            <Button variant="outline" size="sm" className="text-slate-900 hover:text-slate-900 border-slate-200 hover:bg-slate-100">
-                                                                Edit
-                                                            </Button>
-                                                        </Link>
-                                                        <Button 
-                                                            onClick={() => passToAdmin(l.id)} 
-                                                            size="sm" 
-                                                            className="bg-indigo-600 hover:bg-indigo-700 text-white"
-                                                        >
-                                                            {(l.status === 'rejected' || l.status === 'pushed') ? 'Re-Submit' : 'Pass to Admin'}
-                                                        </Button>
-                                                    </>
+                                                    <Button 
+                                                        onClick={() => passToAdmin(l.id)} 
+                                                        size="sm" 
+                                                        className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                                                    >
+                                                        {(l.status === 'rejected' || l.status === 'pushed') ? 'Re-Submit' : 'Pass to Admin'}
+                                                    </Button>
                                                 )}
                                             </div>
                                         </td>

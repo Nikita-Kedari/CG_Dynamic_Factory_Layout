@@ -224,65 +224,70 @@ export default function AdminPage() {
                         <span className="text-xs text-slate-400 font-mono mt-0.5">{layout.version}</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{new Date(layout.createdAt).toLocaleDateString()} {new Date(layout.createdAt).toLocaleTimeString()}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <td className="px-6 py-4">
                         {layout.isActive ? (
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200 whitespace-nowrap">
                             <CheckCircle className="w-3 h-3 mr-1" /> Live
                           </span>
                         ) : layout.status === 'approved' ? (
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200 whitespace-nowrap">
                             Approved
                           </span>
                         ) : layout.status === 'rejected' ? (
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200">
-                            Rejected
-                          </span>
+                          <div className="flex flex-col gap-2 min-w-[120px] max-w-[240px]">
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200 w-fit whitespace-nowrap">Rejected</span>
+                            {layout.adminComments && <p className="text-[10px] text-red-600 bg-red-50 p-2 rounded-lg border border-red-100 break-words leading-tight">{layout.adminComments}</p>}
+                          </div>
+                        ) : layout.status === 'pushed' ? (
+                          <div className="flex flex-col gap-2 min-w-[120px] max-w-[240px]">
+                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200 w-fit whitespace-nowrap">Changes Requested</span>
+                            {layout.adminComments && <p className="text-[10px] text-blue-600 bg-blue-50 p-2 rounded-lg border border-blue-100 break-words leading-tight">{layout.adminComments}</p>}
+                          </div>
                         ) : layout.status === 'pending' ? (
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">
                             <AlertCircle className="w-3 h-3 mr-1" /> Pending Review
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200">
-                            Inactive
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200 whitespace-nowrap">
+                            {layout.status || 'Inactive'}
                           </span>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        {layout.status === 'pending' && (
-                          <div className="flex justify-end gap-3">
-                            <Button
-                              onClick={() => handleApprove(layout.id)}
-                              disabled={loading}
-                              className="bg-blue-100 hover:bg-blue-200 text-blue-700 h-9 px-3 rounded-md flex items-center justify-center transition-colors"
-                              title="Approve this layout version"
-                            >
-                              <Check className="h-4 w-4 mr-1" /> Approve
+                        <div className="flex justify-end gap-2">
+                          <Link href={`/admin/editor?id=${layout.id}`}>
+                            <Button variant="outline" size="sm" className="h-9 px-3 text-slate-700 border-slate-200 hover:bg-slate-50">
+                               View
                             </Button>
-                            <Button
-                              onClick={() => handleReject(layout.id)}
-                              disabled={loading}
-                              className="bg-rose-100 hover:bg-rose-200 text-rose-700 h-9 px-3 rounded-md flex items-center justify-center transition-colors"
-                              title="Reject this layout version"
-                            >
-                              <X className="h-4 w-4 mr-1" /> Reject & Comment
-                            </Button>
-                          </div>
-                        )}
-                        {layout.status === 'approved' && !layout.isActive && (
-                          <div className="flex justify-end gap-3">
+                          </Link>
+                          {(layout.status === 'pending' || layout.status === 'pushed') && (
+                            <>
+                              <Button
+                                onClick={() => handleApprove(layout.id)}
+                                disabled={loading}
+                                className="bg-blue-600 hover:bg-blue-700 text-white h-9 px-3 rounded-md flex items-center justify-center shadow-sm"
+                              >
+                                <Check className="h-4 w-4 mr-1" /> Approve
+                              </Button>
+                              <Button
+                                onClick={() => handleReject(layout.id)}
+                                disabled={loading}
+                                className="bg-rose-500 hover:bg-rose-600 text-white h-9 px-3 rounded-md flex items-center justify-center shadow-sm"
+                              >
+                                <X className="h-4 w-4 mr-1" /> Reject
+                              </Button>
+                            </>
+                          )}
+                          {layout.status === 'approved' && !layout.isActive && (
                             <Button
                               onClick={() => handleActivate(layout.id)}
                               disabled={loading}
-                              className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 h-9 px-3 rounded-md flex items-center justify-center transition-colors"
-                              title="Make this layout live"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white h-9 px-3 rounded-md flex items-center justify-center shadow-sm"
                             >
                               <Factory className="h-4 w-4 mr-1" /> Make Live
                             </Button>
-                          </div>
-                        )}
-                        {layout.isActive && (
-                          <span className="text-xs text-emerald-600 font-medium px-3">Live on Dashboard</span>
-                        )}
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

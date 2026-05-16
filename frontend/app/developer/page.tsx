@@ -241,33 +241,33 @@ export default function DeveloperPage() {
                                     <tr key={l.id}>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{l.version}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{l.name}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
+                                        <td className="px-6 py-4">
                                             {l.status === 'draft' || !l.status ? (
-                                                <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-full">Draft</span>
+                                                <span className="px-2 py-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-full whitespace-nowrap">Draft</span>
                                             ) : l.status === 'pending' ? (
-                                                <span className="px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700 rounded-full">Pending Admin</span>
+                                                <span className="px-2 py-1 text-xs font-medium bg-amber-100 text-amber-700 rounded-full whitespace-nowrap">Pending Admin</span>
                                             ) : l.status === 'pushed' ? (
-                                                <div className="flex flex-col gap-1">
-                                                    <span className="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full w-fit">Changes Requested</span>
+                                                <div className="flex flex-col gap-2 min-w-[150px] max-w-[300px]">
+                                                    <span className="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full w-fit whitespace-nowrap">Changes Requested</span>
                                                     {l.adminComments && (
-                                                        <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded border border-blue-100 mt-1">
-                                                            <strong>Admin Feedback:</strong> {l.adminComments}
+                                                        <div className="text-[11px] text-blue-600 bg-blue-50 p-2.5 rounded-xl border border-blue-100 leading-relaxed break-words">
+                                                            <strong className="block mb-1 opacity-70">Admin Feedback:</strong> {l.adminComments}
                                                         </div>
                                                     )}
                                                 </div>
                                             ) : l.status === 'rejected' ? (
-                                                <div className="flex flex-col gap-1">
-                                                    <span className="inline-block px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full w-fit">Rejected</span>
+                                                <div className="flex flex-col gap-2 min-w-[150px] max-w-[300px]">
+                                                    <span className="inline-block px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full w-fit whitespace-nowrap">Rejected</span>
                                                     {l.adminComments && (
-                                                        <div className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-100 mt-1">
-                                                            <strong>Admin Comment:</strong> {l.adminComments}
+                                                        <div className="text-[11px] text-red-600 bg-red-50 p-2.5 rounded-xl border border-red-100 leading-relaxed break-words">
+                                                            <strong className="block mb-1 opacity-70">Admin Comment:</strong> {l.adminComments}
                                                         </div>
                                                     )}
                                                 </div>
                                             ) : l.isActive || l.status === 'approved' ? (
-                                                <span className="px-2 py-1 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full">Admin Approved</span>
+                                                <span className="px-2 py-1 text-xs font-medium bg-emerald-100 text-emerald-700 rounded-full whitespace-nowrap">Admin Approved</span>
                                             ) : (
-                                                <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">{l.status}</span>
+                                                <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full whitespace-nowrap">{l.status}</span>
                                             )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm">

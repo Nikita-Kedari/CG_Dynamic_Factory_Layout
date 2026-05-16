@@ -1,8 +1,15 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ZoomIn, ZoomOut, Maximize2, Grid3x3, Undo2, Redo2, RotateCcw, Save, ArrowLeft, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity, AlertCircle, CheckSquare, CheckCircle2, XCircle, Send, Search, Checkbox, Plus, Trash2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Grid3x3, Undo2, Redo2, RotateCcw, Save, ArrowLeft, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity, AlertCircle, CheckSquare, CheckCircle2, XCircle, Send, Search, Checkbox, Plus, Trash2, FileImage, FileType } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { jsPDF } from 'jspdf';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { threeAssembliesFactory } from '@/lib/three-assemblies';
 import { parseCSV } from '@/lib/csv-handler';
 
@@ -302,7 +309,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   };
 
-  const downloadImage = () => {
+  const downloadBlueprint = async (format: 'png' | 'pdf') => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     
@@ -312,16 +319,27 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     // Fit to screen for the capture
     handleFitToScreen();
     
-    // Wait for animation to finish settling (roughly)
+    // Wait for animation to finish settling
     setTimeout(() => {
-      const link = document.createElement('a');
-      link.download = `${factory.name || 'factory_layout'}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
+      if (format === 'png') {
+        const link = document.createElement('a');
+        link.download = `${factory.name || 'factory_layout'}.png`;
+        link.href = canvas.toDataURL('image/png', 1.0);
+        link.click();
+      } else if (format === 'pdf') {
+        const imgData = canvas.toDataURL('image/png', 1.0);
+        const pdf = new jsPDF({
+          orientation: canvas.width > canvas.height ? 'l' : 'p',
+          unit: 'px',
+          format: [canvas.width, canvas.height]
+        });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save(`${factory.name || 'factory_layout'}.pdf`);
+      }
       
       // Restore view state
       setViewState(originalViewState);
-    }, 500);
+    }, 800);
   };
 
   const getShareUrl = () => {
@@ -781,7 +799,24 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
         </div>
         <div className="absolute top-0 left-0 right-0 z-20 flex justify-between p-8 bg-gradient-to-b from-[#060b14] via-[#060b14]/80 to-transparent">
           <div className="flex items-center gap-8"><Button onClick={() => window.location.href = isPublicView ? '/' : '/admin'} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155] transition-all active:scale-95"><ArrowLeft className="mr-3 h-5 w-5" /> {isPublicView ? 'Exit View' : 'Back to Console'}</Button><div className="h-10 w-px bg-slate-800"></div><div><h2 className="text-white font-bold text-2xl tracking-tight mb-1">{factory?.name || 'Blueprint Reviewer'} <span className="text-slate-500 font-medium ml-2">ID-{layoutId}</span></h2><p className="text-indigo-400 text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-2"><CheckCircle2 className="h-3 w-3" /> {isPublicView ? 'Public Shared View' : 'Mandatory Review Mode (View Only)'}</p></div></div>
-          <div className="flex gap-4"><Button onClick={() => navigator.clipboard.writeText(getShareUrl()).then(() => setShareMsg(true))} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155]">{shareMsg ? 'Link Copied ✓' : 'Share URL'}</Button><Button onClick={() => window.print()} className="bg-indigo-600 text-white rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-indigo-700 transition-all">Download Blueprint</Button></div>
+          <div className="flex gap-4">
+            <Button onClick={() => navigator.clipboard.writeText(getShareUrl()).then(() => setShareMsg(true))} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155]">{shareMsg ? 'Link Copied ✓' : 'Share URL'}</Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button className="bg-indigo-600 text-white rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-indigo-700 transition-all flex items-center gap-2">
+                  <Download className="h-4 w-4" /> Download Blueprint
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="bg-[#0f172a] border-[#1e293b] text-white p-2 rounded-xl shadow-2xl">
+                <DropdownMenuItem onClick={() => downloadBlueprint('png')} className="flex items-center gap-2 p-3 cursor-pointer hover:bg-indigo-600 rounded-lg transition-colors">
+                  <FileImage className="h-4 w-4" /> Export as PNG Image
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => downloadBlueprint('pdf')} className="flex items-center gap-2 p-3 cursor-pointer hover:bg-indigo-600 rounded-lg transition-colors">
+                  <FileType className="h-4 w-4" /> Export as PDF Document
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
         {!isPublicView && isAdmin && (
           <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-full max-w-5xl z-20 flex flex-col gap-5 bg-[#0f172a]/98 backdrop-blur-xl border border-[#1e293b] p-8 rounded-3xl shadow-2xl ring-1 ring-white/5">
@@ -844,7 +879,21 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
         />
         <Button onClick={() => document.getElementById('csv-upload')?.click()} variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white"><Upload className="h-4 w-4 mr-2" /> Upload CSV</Button>
         <Button onClick={downloadCSV} variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white"><Download className="h-4 w-4 mr-2" /> Download CSV</Button>
-        <Button onClick={downloadImage} variant="outline" className="rounded-xl border-slate-200 text-indigo-600 font-bold hover:bg-indigo-50"><Maximize2 className="h-4 w-4 mr-2" /> Capture Layout</Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="rounded-xl border-slate-200 text-indigo-600 font-bold hover:bg-indigo-50 flex items-center gap-2">
+              <Download className="h-4 w-4" /> Download Blueprint
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="bg-white border-slate-200 text-slate-700 p-2 rounded-xl shadow-2xl">
+            <DropdownMenuItem onClick={() => downloadBlueprint('png')} className="flex items-center gap-2 p-3 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors">
+              <FileImage className="h-4 w-4" /> Export as PNG Image
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => downloadBlueprint('pdf')} className="flex items-center gap-2 p-3 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors">
+              <FileType className="h-4 w-4" /> Export as PDF Document
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <div className="flex-1" />
         <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
           <Button onClick={() => setViewState(p => ({ ...p, targetZoom: Math.max(0.05, p.targetZoom / 1.2) }))} variant="ghost" size="icon" className="h-9 w-9 text-slate-500"><ZoomOut className="h-4 w-4" /></Button><div className="flex items-center px-3 text-[11px] font-bold text-slate-400 min-w-[50px] justify-center">{Math.round(viewState.zoom * 100)}%</div><Button onClick={() => setViewState(p => ({ ...p, targetZoom: Math.min(3, p.targetZoom * 1.2) }))} variant="ghost" size="icon" className="h-9 w-9 text-slate-500"><ZoomIn className="h-4 w-4" /></Button>

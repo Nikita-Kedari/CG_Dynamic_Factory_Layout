@@ -887,14 +887,11 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       }
     }
 
-    // 3. Check Flow Lines (Selection)
-    // For simplicity, we check if the mouse is near any segment of the auto-calculated or manual path
-    // This is expensive but necessary for "Select-to-Edit"
+    // 3. Check Flow Lines & Arrowheads (Selection)
     const allWcsMap: Record<string, any> = {};
     factory.areas.forEach((a: any) => a.lines.forEach((l: any) => l.workCenters.forEach((w: any) => { allWcsMap[w.id] = w; })));
     
     for (const flow of (factory.flows || [])) {
-       // Re-calculate the current path to check hits
        const from = allWcsMap[flow.fromWsId]; const to = allWcsMap[flow.toWsId];
        if (!from || !to) continue;
 
@@ -902,24 +899,36 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
        if (flow.routingPoints) {
          path = flow.routingPoints;
        } else {
-         // Re-run the auto-routing logic to get segments in world coords
          const dx = to.x - from.x; const dy = to.y - from.y;
          const fx = (dx > 0 ? (from.x + from.width) : from.x); const fy = (from.y + from.height / 2);
          const tx = (dx > 0 ? to.x : (to.x + to.width)); const ty = (to.y + to.height / 2);
-         path = [[fx, fy], [tx, fy], [tx, ty]]; // Simplified L-Shape for hit test
+         path = [[fx, fy], [tx, fy], [tx, ty]]; 
        }
 
+       // --- Arrowhead Hit Detection ---
+       const last = path[path.length - 1]; const prev = path[path.length - 2];
+       if (last && prev) {
+          const angle = Math.atan2(last[1] - prev[1], last[0] - prev[0]);
+          const cos = Math.abs(Math.cos(angle)); const sin = Math.abs(Math.sin(angle));
+          const offsetDist = Math.min((to.width / 2) / cos, (to.height / 2) / sin);
+          const arrowTipX = last[0] - offsetDist * Math.cos(angle);
+          const arrowTipY = last[1] - offsetDist * Math.sin(angle);
+          
+          if (Math.sqrt((worldX - arrowTipX)**2 + (worldY - arrowTipY)**2) < 20) {
+             setSelectedFlowId(flow.id); setSelectedWcId(null); return;
+          }
+       }
+
+       // --- Segment Hit Detection ---
        for (let i = 0; i < path.length - 1; i++) {
          const p1 = path[i]; const p2 = path[i+1];
-         // Basic point-to-line segment distance
          const l2 = (p2[0]-p1[0])**2 + (p2[1]-p1[1])**2;
          const t = Math.max(0, Math.min(1, ((worldX-p1[0])*(p2[0]-p1[0]) + (worldY-p1[1])*(p2[1]-p1[1])) / l2));
          const dist = Math.sqrt((worldX - (p1[0] + t*(p2[0]-p1[0])))**2 + (worldY - (p1[1] + t*(p2[1]-p1[1])))**2);
          
-         if (dist < 10) {
+         if (dist < 15) { // Increased tolerance
            setSelectedFlowId(flow.id);
            setSelectedWcId(null);
-           // Initialize routing points if empty so they appear for editing
            if (!flow.routingPoints) {
               const dx = to.x - from.x; const dy = to.y - from.y;
               const fx = (dx > 0 ? (from.x + from.width) : from.x); const fy = (from.y + from.height / 2);

@@ -147,7 +147,18 @@ router.post('/upload-csv', upload.single('file'), async (req, res) => {
           OUTPUT INSERTED.ws_id
           VALUES (@lid, @code, @name, @seq, @x, @y, @w, @l, @ops, @pwr, @detail)
         `);
-      wsMap[code] = ins.recordset[0].ws_id;
+      const wsId = ins.recordset[0].ws_id;
+      wsMap[code] = wsId;
+
+      // --- AUTO-INITIALIZE PARAMETERS FOR THIS LAYOUT VERSION ---
+      // We use the ws_code as the identifier for parameters (e.g. 'W1')
+      await pool.request()
+        .input('vid', sql.Int, versionId)
+        .input('wsid', sql.VarChar, code.toLowerCase())
+        .query(`
+          INSERT INTO WORKSTATION_Parameters (layout_version_id, ws_id, status, oee, orders)
+          VALUES (@vid, @wsid, 'Running', '0', 'N/A')
+        `);
     }
 
     // ── 7. Flows ──────────────────────────────────────────────────

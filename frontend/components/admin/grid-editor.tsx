@@ -182,6 +182,13 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     return () => clearInterval(interval);
   }, [layoutId, factory]);
 
+  // 3. Automatic Re-Center on Load
+  useEffect(() => {
+    if (factory?.areas?.length > 0) {
+      setTimeout(handleFitToScreen, 500); // Wait for initial render
+    }
+  }, [factory.id]); // Trigger when layout identity changes
+
   const allFilters = [
     { id: 'ws_id', label: 'Workstation ID', description: 'Unique identifier' },
     ...availableParameters
@@ -245,11 +252,48 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
 
   const handleFitToScreen = useCallback(() => {
     const canvas = canvasRef.current; if (!canvas || !factory) return;
-    const pad = 200;
-    const scale = Math.min((canvas.width - pad * 2) / factory.width, (canvas.height - pad * 2) / factory.height, 1.0);
-    const targetZoom = Math.max(0.05, scale);
-    setViewState(prev => ({ ...prev, targetZoom, targetPanX: (canvas.width - factory.width * targetZoom) / 2, targetPanY: (canvas.height - factory.height * targetZoom) / 2 }));
-  }, [factory]);
+    
+    // 1. Calculate the true bounding box of the layout topology
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    factory.areas.forEach((a: any) => {
+      minX = Math.min(minX, a.x);
+      minY = Math.min(minY, a.y);
+      maxX = Math.max(maxX, a.x + a.width);
+      maxY = Math.max(maxY, a.y + a.height);
+    });
+
+    if (minX === Infinity) { minX = 0; minY = 0; maxX = factory.width || 2000; maxY = factory.height || 2000; }
+
+    const layoutW = maxX - minX;
+    const layoutH = maxY - minY;
+
+    // 2. Define Sidebar/Panel Offsets (Usable Viewport)
+    const isReviewMode = isAdmin || readOnly || isPublicView;
+    const leftOffset = isReviewMode ? 320 : 340; // 320 is sidebar, 340 gives extra breathing
+    const rightOffset = 40;
+    const topOffset = 40;
+    const bottomOffset = isReviewMode ? 180 : 40; // Admin feedback panel is at bottom
+
+    const usableW = canvas.width - (isReviewMode ? 400 : leftOffset + 60); 
+    const usableH = canvas.height - (isReviewMode ? topOffset + bottomOffset : 120);
+    const usableX = isReviewMode ? 340 : leftOffset + 20;
+    const usableY = isReviewMode ? topOffset + 40 : 80;
+
+    // 3. Calculate Scale & Center
+    const padding = 100;
+    const scale = Math.min(
+      (usableW - padding) / layoutW,
+      (usableH - padding) / layoutH,
+      1.2 // Max zoom limit for auto-fit
+    );
+    const targetZoom = Math.max(0.15, scale);
+
+    // Calculate pan to center the layout box within the usable viewport center
+    const targetPanX = usableX + (usableW - layoutW * targetZoom) / 2 - minX * targetZoom;
+    const targetPanY = usableY + (usableH - layoutH * targetZoom) / 2 - minY * targetZoom;
+
+    setViewState(prev => ({ ...prev, targetZoom, targetPanX, targetPanY }));
+  }, [factory, isAdmin, readOnly, isPublicView]);
 
   const downloadCSV = () => {
     const headers = factory.csvHeaders || [
@@ -1163,6 +1207,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
         <div className="absolute top-0 left-0 right-0 z-20 flex justify-between p-8 bg-gradient-to-b from-[#060b14] via-[#060b14]/80 to-transparent">
           <div className="flex items-center gap-8"><Button onClick={() => window.location.href = isPublicView ? '/' : '/admin'} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155] transition-all active:scale-95"><ArrowLeft className="mr-3 h-5 w-5" /> {isPublicView ? 'Exit View' : 'Back to Console'}</Button><div className="h-10 w-px bg-slate-800"></div><div><h2 className="text-white font-bold text-2xl tracking-tight mb-1">{factory?.name || 'Blueprint Reviewer'} <span className="text-slate-500 font-medium ml-2">ID-{layoutId}</span></h2><p className="text-indigo-400 text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-2"><CheckCircle2 className="h-3 w-3" /> {isPublicView ? 'Public Shared View' : 'Mandatory Review Mode (View Only)'}</p></div></div>
           <div className="flex gap-4">
+            <Button onClick={handleFitToScreen} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155] transition-all active:scale-95"><Maximize2 className="mr-2 h-4 w-4" /> Re-Center</Button>
             <Button onClick={() => navigator.clipboard.writeText(getShareUrl()).then(() => setShareMsg(true))} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155]">{shareMsg ? 'Link Copied ✓' : 'Share URL'}</Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

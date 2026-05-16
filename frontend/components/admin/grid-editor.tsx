@@ -471,22 +471,167 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       drawArrowhead(realLast.x, realLast.y, angle, color);
     };
 
-    // ── 1. Draw Areas ───────────────────────────
     factory.areas.forEach((area: any) => {
       const ax = area.x * zoom + panX; const ay = area.y * zoom + panY;
       const aw = area.width * zoom; const ah = area.height * zoom;
       const isSelectedArea = area.id === selectedAreaId;
       
-      // Draw Area Background
+      // --- ROBUST COLLISION RESOLUTION (Zero-Overlap Plotting) ---
+      const resolvedWcs: any[] = [];
+      area.lines?.forEach((line: any) => {
+        line.workCenters?.forEach((wc: any) => {
+          let nx = wc.x; let ny = wc.y;
+          const pad = 30; // Clean architectural padding
+          
+          // Iterative resolution to handle complex clusters (max 10 passes)
+          for (let pass = 0; pass < 10; pass++) {
+            let collided = false;
+            for (const other of resolvedWcs) {
+              const ox = (nx < other.x + other.width + pad) && (nx + wc.width + pad > other.x);
+              const oy = (ny < other.y + other.height + pad) && (ny + wc.height + pad > other.y);
+              
+              if (ox && oy) {
+                collided = true;
+                // Smart Shift Strategy
+                if (nx + wc.width + pad < area.x + area.width) {
+                  nx = other.x + other.width + pad; // Shift Right
+                } else if (ny + wc.height + pad < area.y + area.height) {
+                  ny = other.y + other.height + pad; // Shift Down
+                } else {
+                  nx = other.x - wc.width - pad; // Shift Left
+                }
+              }
+            }
+            if (!collided) break;
+          }
+          resolvedWcs.push({ ...wc, x: nx, y: ny });
+        });
+      });
+
+      // Draw Area
       ctx.fillStyle = isSelectedArea ? 'rgba(148, 163, 184, 0.08)' : 'rgba(30, 41, 59, 0.4)';
       roundRect(ctx, ax, ay, aw, ah, 12 * zoom); ctx.fill();
       ctx.strokeStyle = isSelectedArea ? '#94a3b8' : '#334155'; ctx.lineWidth = (isSelectedArea ? 2 : 1.5) * zoom; 
       roundRect(ctx, ax, ay, aw, ah, 12 * zoom); ctx.stroke();
       ctx.fillStyle = isSelectedArea ? '#f1f5f9' : '#64748b'; ctx.font = `bold ${Math.max(10, 16 * zoom)}px Inter`;
       ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(area.areaName.toUpperCase(), ax + 20 * zoom, ay + 20 * zoom);
-    });
 
-    // ── 2. Draw Dynamic Flows (Under Workstations) ───────────────────────────
+      // Draw Resolved Workstations
+      resolvedWcs.forEach((wc: any) => {
+          const isSelected = wc.id === selectedWcId;
+          const isHovered = wc.id === hoveredWcId;
+          const _id = (wc.id || '').toLowerCase();
+          const excelData = dynamicWorkstationData[_id] || dynamicWorkstationData['w' + _id] || wc.parameters || EXCEL_WORKSTATIONS['w' + _id.replace(/^w/, '')];
+          
+          const status = (excelData?.status || 'Running').toLowerCase();
+          let color = '#10b981'; if (status === 'idle') color = '#f59e0b'; else if (status === 'down' || status === 'critical') color = '#ef4444';
+
+          const ww = wc.width * zoom; const wh = wc.height * zoom;
+
+          // --- BOUNDARY CLAMP ---
+          const minX = ax + 10 * zoom; const maxX = ax + aw - ww - 10 * zoom;
+          const minY = ay + 10 * zoom; const maxY = ay + ah - wh - 10 * zoom;
+          const wx = Math.max(minX, Math.min(maxX, wc.x * zoom + panX));
+          const wy = Math.max(minY, Math.min(maxY, wc.y * zoom + panY));
+          // ---------------------
+
+          ctx.fillStyle = (isSelected || isHovered) ? 'rgba(56, 189, 248, 0.2)' : 'rgba(15, 23, 42, 0.98)';
+          ctx.strokeStyle = isSelected ? '#38bdf8' : (isHovered ? '#fff' : color); ctx.lineWidth = (isSelected ? 4 : 3) * zoom;
+          roundRect(ctx, wx, wy, ww, wh, 8 * zoom); ctx.fill(); ctx.stroke();
+
+          // --- ADAPTIVE PARAMETER RENDERING ---
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          const wsIdText = wc.workCenterId || wc.name || '';
+          
+          if (activeFilterIds['ws_id']) { 
+            ctx.fillStyle = '#ffffff'; 
+            // Remove Math.max floor during capture to maintain proportions
+            const idFontSize = isCapturing ? (36 * zoom) : Math.max(12, 36 * zoom);
+            ctx.font = `bold ${idFontSize}px Inter`; 
+            if (zoom < 0.4 && !isCapturing) ctx.font = `bold ${Math.max(20, 48 * zoom)}px Inter`;
+            ctx.fillText(wsIdText, wx + ww / 2, wy + wh / 2); 
+          }
+          
+          // --- PERSISTENT SIDE-CARD RENDERING (Adaptive Positioning) ---
+          const shouldShowCard = zoom > 0.8 || isHovered || isCapturing;
+          
+          if (shouldShowCard) {
+             const cardW = 160 * zoom; 
+             const cardH = 80 * zoom;
+             const padding = 10 * zoom;
+             
+             // 1. SMART POSITIONING BASED ON FLOW DIRECTION
+             // Detect outgoing flow direction for this workstation
+             const outFlow = (factory.flows || []).find((f: any) => f.fromWsId === wc.id);
+             let cardPos = 'right'; // Default
+             
+             if (outFlow) {
+                const target = allWcs[outFlow.toWsId];
+                if (target) {
+                   const fdx = target.x - wc.x;
+                   const fdy = target.y - wc.y;
+                   // If flow is mostly horizontal to the right, move box ABOVE
+                   if (fdx > 50 && Math.abs(fdx) > Math.abs(fdy)) {
+                      cardPos = 'top';
+                   } 
+                   // If flow is mostly vertical downwards, keep box RIGHT
+                   else if (fdy > 50 && Math.abs(fdy) > Math.abs(fdx)) {
+                      cardPos = 'right';
+                   }
+                }
+             }
+
+             let cx, cy;
+             if (cardPos === 'top') {
+                cx = wx + ww / 2 - cardW / 2;
+                cy = wy - cardH - 15 * zoom;
+             } else {
+                // Default: Right side
+                cx = wx + ww + 15 * zoom;
+                cy = wy + wh / 2 - cardH / 2;
+             }
+
+             // Handle canvas boundary collisions (push left if overflowing right)
+             if (cx + cardW > canvas.width - 20) cx = wx - cardW - 15 * zoom;
+
+             ctx.save();
+             // Glassmorphism effect
+             ctx.shadowBlur = 10 * zoom; ctx.shadowColor = 'rgba(0,0,0,0.2)';
+             ctx.fillStyle = isHovered ? 'rgba(30, 41, 59, 0.95)' : 'rgba(15, 23, 42, 0.75)';
+             roundRect(ctx, cx, cy, cardW, cardH, 10 * zoom); ctx.fill();
+             ctx.strokeStyle = isHovered ? '#38bdf8' : 'rgba(255,255,255,0.1)'; 
+             ctx.lineWidth = 1 * zoom; ctx.stroke();
+             ctx.restore();
+
+             // Card Content
+             const headerFS = isCapturing ? (13 * zoom) : Math.max(9, 13 * zoom);
+             ctx.fillStyle = '#fff'; ctx.font = `bold ${headerFS}px Inter`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+             ctx.fillText(wsIdText, cx + padding, cy + padding);
+             
+             ctx.fillStyle = color; ctx.beginPath(); ctx.arc(cx + cardW - padding - 3*zoom, cy + padding + 5*zoom, 3 * zoom, 0, Math.PI*2); ctx.fill();
+             
+             let tyOff = padding + 18 * zoom;
+             const visibleParams = availableParameters.filter(p => activeFilterIds[p.id]);
+             
+             visibleParams.slice(0, 3).forEach(p => {
+               const v = excelData?.[p.id] || 'N/A';
+               const displayVal = (p.id === 'oee') ? `${v}%` : v.toString();
+               
+               const labelFS = isCapturing ? (9 * zoom) : Math.max(7, 9 * zoom);
+               ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = `600 ${labelFS}px Inter`;
+               ctx.fillText(`${p.label}:`, cx + padding, cy + tyOff);
+               
+               ctx.fillStyle = '#fff'; ctx.font = `bold ${labelFS}px Inter`;
+               const labelWidth = ctx.measureText(`${p.label}:`).width;
+               ctx.fillText(displayVal, cx + padding + labelWidth + 4*zoom, cy + tyOff);
+               
+               tyOff += 14 * zoom;
+             });
+          }
+        });
+      });
+
+    // ── 3. Dynamic Flows (CSV Driven) ───────────────────────────
     const allWcs: Record<string, any> = {};
     factory.areas.forEach((a: any) => a.lines.forEach((l: any) => l.workCenters.forEach((w: any) => {
       allWcs[w.id] = { ...w, area: a };
@@ -532,118 +677,20 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
           path.push({ x: tx, y: ty });
         }
       } else {
-        // --- Long Distance: Architectural Step Routing ---
-        const midX = fx + (tx - fx) / 2;
-        path.push({ x: midX, y: fy });
-        path.push({ x: midX, y: ty });
+        // --- Long Distance: U-Shape or Inverted U-Shape (Corridor) ---
+        const useTop = dy < 0; 
+        const perimeterY = useTop 
+          ? (from.area.y - 40) * zoom + panY - laneSpace 
+          : (from.area.y + from.area.height + 40) * zoom + panY + laneSpace;
+        
+        path.push({ x: fx, y: perimeterY });
+        path.push({ x: tx, y: perimeterY });
         path.push({ x: tx, y: ty });
       }
 
       drawPathWithArrow(path, flowColor, true, { w: to.width * zoom, h: to.height * zoom });
     });
-
-    // ── 3. Draw Workstations (Over Everything) ───────────────────────────
-    factory.areas.forEach((area: any) => {
-      const ax = area.x * zoom + panX; const ay = area.y * zoom + panY;
-      const aw = area.width * zoom; const ah = area.height * zoom;
-      
-      const resolvedWcs: any[] = [];
-      area.lines?.forEach((line: any) => {
-        line.workCenters?.forEach((wc: any) => {
-          let nx = wc.x; let ny = wc.y;
-          const pad = 30; // Clean architectural padding
-          for (let pass = 0; pass < 10; pass++) {
-            let collided = false;
-            for (const other of resolvedWcs) {
-              const ox = (nx < other.x + other.width + pad) && (nx + wc.width + pad > other.x);
-              const oy = (ny < other.y + other.height + pad) && (ny + wc.height + pad > other.y);
-              if (ox && oy) {
-                collided = true;
-                if (nx + wc.width + pad < area.x + area.width) nx = other.x + other.width + pad;
-                else if (ny + wc.height + pad < area.y + area.height) ny = other.y + other.height + pad;
-                else nx = other.x - wc.width - pad;
-              }
-            }
-            if (!collided) break;
-          }
-          resolvedWcs.push({ ...wc, x: nx, y: ny });
-        });
-      });
-
-      resolvedWcs.forEach((wc: any) => {
-          const isSelected = wc.id === selectedWcId;
-          const isHovered = wc.id === hoveredWcId;
-          const _id = (wc.id || '').toLowerCase();
-          const excelData = dynamicWorkstationData[_id] || dynamicWorkstationData['w' + _id] || wc.parameters || EXCEL_WORKSTATIONS['w' + _id.replace(/^w/, '')];
-          
-          const status = (excelData?.status || 'Running').toLowerCase();
-          let color = '#10b981'; if (status === 'idle') color = '#f59e0b'; else if (status === 'down' || status === 'critical') color = '#ef4444';
-
-          const ww = wc.width * zoom; const wh = wc.height * zoom;
-          const wx = Math.max(ax + 10 * zoom, Math.min(ax + aw - ww - 10 * zoom, wc.x * zoom + panX));
-          const wy = Math.max(ay + 10 * zoom, Math.min(ay + ah - wh - 10 * zoom, wc.y * zoom + panY));
-
-          ctx.fillStyle = (isSelected || isHovered) ? 'rgba(56, 189, 248, 0.2)' : 'rgba(15, 23, 42, 0.98)';
-          ctx.strokeStyle = isSelected ? '#38bdf8' : (isHovered ? '#fff' : color); ctx.lineWidth = (isSelected ? 4 : 3) * zoom;
-          roundRect(ctx, wx, wy, ww, wh, 8 * zoom); ctx.fill(); ctx.stroke();
-
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-          const wsIdText = wc.workCenterId || wc.name || '';
-          
-          if (activeFilterIds['ws_id']) { 
-            ctx.fillStyle = '#ffffff'; 
-            const idFontSize = isCapturing ? (36 * zoom) : Math.max(12, 36 * zoom);
-            ctx.font = `bold ${idFontSize}px Inter`; 
-            if (zoom < 0.4 && !isCapturing) ctx.font = `bold ${Math.max(20, 48 * zoom)}px Inter`;
-            ctx.fillText(wsIdText, wx + ww / 2, wy + wh / 2); 
-          }
-          
-          const shouldShowCard = zoom > 0.8 || isHovered || isCapturing;
-          
-          if (shouldShowCard) {
-             const cardW = 160 * zoom; 
-             const cardH = 80 * zoom;
-             const padding = 10 * zoom;
-             const cx = wx + ww / 2 - cardW / 2; 
-             const cy = wy - cardH - 12 * zoom;
-
-             ctx.save();
-             ctx.shadowBlur = 10 * zoom; ctx.shadowColor = 'rgba(0,0,0,0.2)';
-             // GLASS BOX EFFECT: arrows visible behind but text clear on top
-             ctx.fillStyle = isHovered ? 'rgba(30, 41, 59, 0.95)' : 'rgba(15, 23, 42, 0.6)';
-             roundRect(ctx, cx, cy, cardW, cardH, 10 * zoom); ctx.fill();
-             ctx.strokeStyle = isHovered ? '#38bdf8' : 'rgba(255,255,255,0.1)'; 
-             ctx.lineWidth = 1 * zoom; ctx.stroke();
-             ctx.restore();
-
-             const headerFS = isCapturing ? (13 * zoom) : Math.max(9, 13 * zoom);
-             ctx.fillStyle = '#fff'; ctx.font = `bold ${headerFS}px Inter`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-             ctx.fillText(wsIdText, cx + padding, cy + padding);
-             
-             ctx.fillStyle = color; ctx.beginPath(); ctx.arc(cx + cardW - padding - 3*zoom, cy + padding + 5*zoom, 3 * zoom, 0, Math.PI*2); ctx.fill();
-             
-             let tyOff = padding + 18 * zoom;
-             const visibleParams = availableParameters.filter(p => activeFilterIds[p.id]);
-             
-             visibleParams.slice(0, 3).forEach(p => {
-               const v = excelData?.[p.id] || 'N/A';
-               const displayVal = (p.id === 'oee') ? `${v}%` : v.toString();
-               
-               const labelFS = isCapturing ? (9 * zoom) : Math.max(7, 9 * zoom);
-               ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = `600 ${labelFS}px Inter`;
-               ctx.fillText(`${p.label}:`, cx + padding, cy + tyOff);
-               
-               ctx.fillStyle = '#fff'; ctx.font = `bold ${labelFS}px Inter`;
-               const labelWidth = ctx.measureText(`${p.label}:`).width;
-               ctx.fillText(displayVal, cx + padding + labelWidth + 4*zoom, cy + tyOff);
-               
-               tyOff += 14 * zoom;
-             });
-          }
-      });
-    });
-
-   }, [factory, viewState, showGrid, activeFilterIds, dynamicWorkstationData, selectedAreaId, selectedWcId, isAdmin, isPublicView, hoveredWcId, isCapturing]);
+  }, [factory, viewState, showGrid, activeFilterIds, dynamicWorkstationData, selectedAreaId, selectedWcId, isAdmin, isPublicView, hoveredWcId, isCapturing]);
 
   const selectedArea = factory.areas.find((a: any) => a.id === (selectedAreaId || ''));
   const selectedWc = factory.areas.flatMap((a: any) => a.lines.flatMap((l: any) => l.workCenters)).find((w: any) => w.id === (selectedWcId || ''));

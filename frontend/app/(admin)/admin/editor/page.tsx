@@ -6,7 +6,7 @@ import { logout, getCurrentUser } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import { LogOut, Factory, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 export default function EditorPage() {
   const router = useRouter();
@@ -137,6 +137,13 @@ export default function EditorPage() {
     logout();
     router.push('/');
   };
+
+  const handleLayoutChange = useCallback((id: string, name: string) => {
+    setLayoutId(id);
+    setLayoutName(name);
+    const newUrl = `${window.location.pathname}?id=${id}`;
+    window.history.pushState({ path: newUrl }, '', newUrl);
+  }, []);
 
   const handleSaveFactory = useCallback(async (factory: any) => {
     console.log('Factory triggered save:', factory);

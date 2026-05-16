@@ -77,6 +77,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   const [selectedWcId, setSelectedWcId] = useState<string | null>(null);
   const [hoveredWcId, setHoveredWcId] = useState<string | null>(null);
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
   const [adminComment, setAdminComment] = useState('');
   
   // Dynamic Parameters State
@@ -315,6 +316,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     if (!canvas || !factory?.areas) return;
     
     const originalViewState = { ...viewState };
+    setIsCapturing(true); // Enable capture mode to force parameter visibility
     
     // 1. Calculate the actual bounding box of the physical layout (areas)
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -328,21 +330,17 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     if (minX !== Infinity) {
       const layoutW = maxX - minX;
       const layoutH = maxY - minY;
-      const margin = 40; // Approximately 1cm (38-40px)
+      const margin = 60; // Slightly more margin for labels during capture
       
-      // Calculate scale to fit the bounding box into the canvas with a tight margin
       const scale = Math.min(
         (canvas.width - margin * 2) / layoutW,
         (canvas.height - margin * 2) / layoutH
       );
       
       const captureZoom = Math.max(0.1, Math.min(scale, 3.0));
-      
-      // Calculate pan to center the bounding box
       const capturePanX = (canvas.width - layoutW * captureZoom) / 2 - minX * captureZoom;
       const capturePanY = (canvas.height - layoutH * captureZoom) / 2 - minY * captureZoom;
 
-      // Apply view state immediately for the capture
       setViewState(prev => ({
         ...prev,
         zoom: captureZoom,
@@ -354,7 +352,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       }));
     }
     
-    // Wait for the render loop to settle on the new view
+    // Wait for the render loop to settle
     setTimeout(() => {
       if (format === 'png') {
         const link = document.createElement('a');
@@ -372,9 +370,9 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
         pdf.save(`${factory.name || 'factory_layout'}.pdf`);
       }
       
-      // Restore user's previous view
+      setIsCapturing(false); // Restore normal mode
       setViewState(originalViewState);
-    }, 1000);
+    }, 1200);
   };
 
   const getShareUrl = () => {
@@ -541,8 +539,8 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
             ctx.fillText(wsIdText, wx + ww / 2, wy + wh / 2); 
           }
           
-          // --- PERSISTENT SIDE-CARD RENDERING (When Zoomed In or Hovered) ---
-          const shouldShowCard = zoom > 0.8 || isHovered;
+          // --- PERSISTENT SIDE-CARD RENDERING (When Zoomed In, Hovered, or Capturing) ---
+          const shouldShowCard = zoom > 0.8 || isHovered || isCapturing;
           
           if (shouldShowCard) {
              const cardW = 180 * zoom; 
@@ -648,7 +646,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
 
       drawPathWithArrow(path, flowColor, true, { w: to.width * zoom, h: to.height * zoom });
     });
-  }, [factory, viewState, showGrid, activeFilterIds, dynamicWorkstationData, selectedAreaId, selectedWcId, isAdmin, isPublicView, hoveredWcId]);
+  }, [factory, viewState, showGrid, activeFilterIds, dynamicWorkstationData, selectedAreaId, selectedWcId, isAdmin, isPublicView, hoveredWcId, isCapturing]);
 
   const selectedArea = factory.areas.find((a: any) => a.id === (selectedAreaId || ''));
   const selectedWc = factory.areas.flatMap((a: any) => a.lines.flatMap((l: any) => l.workCenters)).find((w: any) => w.id === (selectedWcId || ''));

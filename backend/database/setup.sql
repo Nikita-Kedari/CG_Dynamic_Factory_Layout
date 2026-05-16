@@ -182,20 +182,17 @@ GO
 -- ─────────────────────────────────────────────
 -- 9. WORKSTATION_PARAMETERS
 -- ─────────────────────────────────────────────
-IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'WORKSTATION_PARAMETERS')
-CREATE TABLE WORKSTATION_PARAMETERS (
-    ws_parameter_id INT IDENTITY(1,1) PRIMARY KEY,
-    ws_id           INT          NOT NULL REFERENCES WORKSTATIONS(ws_id) ON DELETE CASCADE,
-    param_key       VARCHAR(100) NOT NULL,
-    param_value     VARCHAR(500),
-    param_unit      VARCHAR(50),
-    data_type       VARCHAR(50),
-    is_mandatory    BIT          DEFAULT 0,
-    last_updated    DATETIME     DEFAULT GETDATE(),
-    updated_by      VARCHAR(100),
-    notes           VARCHAR(500)
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'WORKSTATION_Parameters')
+CREATE TABLE WORKSTATION_Parameters (
+    WS_Parameter_ID  INT IDENTITY(1,1) PRIMARY KEY,
+    WS_ID            VARCHAR(50)  NOT NULL,   -- e.g. 'W1', 'W2' … matches ws_code
+    OEE              FLOAT,                   -- Overall Equipment Effectiveness (%)
+    Orders           VARCHAR(100),            -- Current order reference
+    Status           VARCHAR(50),             -- Running, Idle, Down
+    layout_version_id INT                     -- Foreign key to layout versions
 );
 GO
+
 
 -- ─────────────────────────────────────────────
 -- 10. MACHINES

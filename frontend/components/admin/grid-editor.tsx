@@ -458,18 +458,44 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     return url.toString();
   };
 
+  const lastTimeRef = useRef<number>(performance.now());
+  
   useEffect(() => {
-    let lastTime = performance.now();
     const animate = (time: number) => {
-      const delta = (time - lastTime) / 1000;
-      lastTime = time;
-      setViewState(prev => ({
-        ...prev,
-        time: prev.time + delta,
-        zoom: prev.zoom + (prev.targetZoom - prev.zoom) * (1 - Math.exp(-10 * delta)),
-        panX: prev.panX + (prev.targetPanX - prev.panX) * (1 - Math.exp(-10 * delta)),
-        panY: prev.panY + (prev.targetPanY - prev.panY) * (1 - Math.exp(-10 * delta)),
-      }));
+      const delta = (time - lastTimeRef.current) / 1000;
+      lastTimeRef.current = time;
+
+      if (delta > 0) {
+        setViewState(prev => {
+          const smoothing = 1 - Math.exp(-15 * delta);
+          const nextZoom = prev.zoom + (prev.targetZoom - prev.zoom) * smoothing;
+          const nextPanX = prev.panX + (prev.targetPanX - prev.panX) * smoothing;
+          const nextPanY = prev.panY + (prev.targetPanY - prev.panY) * smoothing;
+          
+          // Only update if there is a meaningful change
+          const zoomDiff = Math.abs(nextZoom - prev.zoom);
+          const panXDiff = Math.abs(nextPanX - prev.panX);
+          const panYDiff = Math.abs(nextPanY - prev.panY);
+          
+          const isMoving = zoomDiff > 0.0001 || panXDiff > 0.01 || panYDiff > 0.01;
+          
+          // We always update 'time' for the dashed flow lines, 
+          // but we can snap zoom/pan if they are close enough to target
+          const finalZoom = Math.abs(nextZoom - prev.targetZoom) < 0.0001 ? prev.targetZoom : nextZoom;
+          const finalPanX = Math.abs(nextPanX - prev.targetPanX) < 0.1 ? prev.targetPanX : nextPanX;
+          const finalPanY = Math.abs(nextPanY - prev.targetPanY) < 0.1 ? prev.targetPanY : nextPanY;
+
+          if (!isMoving && Math.abs(prev.time + delta - prev.time) < 0.001) return prev;
+
+          return {
+            ...prev,
+            time: prev.time + delta,
+            zoom: finalZoom,
+            panX: finalPanX,
+            panY: finalPanY
+          };
+        });
+      }
       animationFrameRef.current = requestAnimationFrame(animate);
     };
     animationFrameRef.current = requestAnimationFrame(animate);

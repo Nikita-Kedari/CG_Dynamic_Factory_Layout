@@ -471,6 +471,11 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       drawArrowhead(realLast.x, realLast.y, angle, color);
     };
 
+    const allWcs: Record<string, any> = {};
+    factory.areas.forEach((a: any) => a.lines.forEach((l: any) => l.workCenters.forEach((w: any) => {
+      allWcs[w.id] = { ...w, area: a };
+    })));
+
     factory.areas.forEach((area: any) => {
       const ax = area.x * zoom + panX; const ay = area.y * zoom + panY;
       const aw = area.width * zoom; const ah = area.height * zoom;
@@ -631,11 +636,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
         });
       });
 
-    // ── 3. Dynamic Flows (CSV Driven) ───────────────────────────
-    const allWcs: Record<string, any> = {};
-    factory.areas.forEach((a: any) => a.lines.forEach((l: any) => l.workCenters.forEach((w: any) => {
-      allWcs[w.id] = { ...w, area: a };
-    })));
+
 
     (factory.flows || []).forEach((flow: any, fIdx: number) => {
       const from = allWcs[flow.fromWsId];

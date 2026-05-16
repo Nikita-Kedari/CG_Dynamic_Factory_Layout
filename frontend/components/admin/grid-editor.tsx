@@ -905,31 +905,59 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
         const targetX = itemStartX + dx; const targetY = itemStartY + dy;
         let collision = false;
         area.lines[0].workCenters.forEach((other: any) => { if (other.id !== id) { const pad = 20; if (targetX < other.x + other.width + pad && targetX + wc.width > other.x - pad && targetY < other.y + other.height + pad && targetY + wc.height > other.y - pad) collision = true; } });
-        if (!collision) { wc.x = Math.max(area.x, Math.min(area.x + area.width - wc.width, targetX)); wc.y = Math.max(area.y, Math.min(area.y + area.height - wc.height, targetY)); updateFactory(newFactory, false); }
-      }
-    } else if (type === 'waypoint' && !isAdmin && !readOnly && !isPublicView) {
-      const flowId = (dragRef.current as any).flowId;
-      const wpIndex = (dragRef.current as any).wpIndex;
-      if (flowId !== undefined && wpIndex !== undefined) {
-        const newFactory = { ...factory };
-        const flow = newFactory.flows.find((f: any) => f.id === flowId);
-        if (flow && flow.routingPoints) {
-           const nx = Math.round((itemStartX + dx) / 20) * 20;
-           const ny = Math.round((itemStartY + dy) / 20) * 20;
-           if (wpIndex > 0 && wpIndex < flow.routingPoints.length - 1) {
-              const newPts = [...flow.routingPoints];
-              newPts[wpIndex] = [nx, ny];
-              const prev = newPts[wpIndex-1];
-              if (Math.abs(nx - prev[0]) < Math.abs(ny - prev[1])) {
-                 newPts[wpIndex][0] = prev[0];
-              } else {
-                 newPts[wpIndex][1] = prev[1];
+        if (!collision) { 
+           wc.x = Math.max(area.x, Math.min(area.x + area.width - wc.width, targetX)); 
+           wc.y = Math.max(area.y, Math.min(area.y + area.height - wc.height, targetY)); 
+
+           // STICKY CONNECTIONS: Update routing points of connected flows
+           newFactory.flows = (newFactory.flows || []).map((f: any) => {
+              if ((f.fromWsId === id || f.toWsId === id) && f.routingPoints) {
+                 const newPts = [...f.routingPoints.map((p: any) => [...p])];
+                 const from = f.fromWsId === id ? wc : allWcs[f.fromWsId];
+                 const to = f.toWsId === id ? wc : allWcs[f.toWsId];
+                 
+                 // Re-calculate optimized entry/exit points
+                 const fdx = to.x - from.x; const fdy = to.y - from.y;
+                 if (f.fromWsId === id) {
+                    newPts[0] = [
+                       (Math.abs(fdx) > Math.abs(fdy) ? (fdx > 0 ? (from.x + from.width) : from.x) : (from.x + from.width / 2)),
+                       (Math.abs(fdy) >= Math.abs(fdx) ? (fdy > 0 ? (from.y + from.height) : from.y) : (from.y + from.height / 2))
+                    ];
+                 }
+                 if (f.toWsId === id) {
+                    newPts[newPts.length - 1] = [
+                       (Math.abs(fdx) > Math.abs(fdy) ? (fdx > 0 ? to.x : (to.x + to.width)) : (to.x + to.width / 2)),
+                       (Math.abs(fdy) >= Math.abs(fdx) ? (fdy > 0 ? to.y : (to.y + to.height)) : (to.y + to.height / 2))
+                    ];
+                 }
+                 return { ...f, routingPoints: newPts };
               }
-              flow.routingPoints = newPts;
-              updateFactory(newFactory, false);
-           }
+              return f;
+           });
+           updateFactory(newFactory, false); 
         }
       }
+    } else if (type === 'waypoint' && !isAdmin && !readOnly && !isPublicView) {
+       // ... existing waypoint logic ...
+       const flowId = (dragRef.current as any).flowId;
+       const wpIndex = (dragRef.current as any).wpIndex;
+       if (flowId !== undefined && wpIndex !== undefined) {
+         const newFactory = { ...factory };
+         const flow = newFactory.flows.find((f: any) => f.id === flowId);
+         if (flow && flow.routingPoints) {
+            const newPts = [...flow.routingPoints.map((p: any) => [...p])];
+            const nx = Math.round((itemStartX + dx) / 20) * 20;
+            const ny = Math.round((itemStartY + dy) / 20) * 20;
+            if (wpIndex > 0 && wpIndex < flow.routingPoints.length - 1) {
+               newPts[wpIndex] = [nx, ny];
+               const prev = newPts[wpIndex-1];
+               if (Math.abs(nx - prev[0]) < Math.abs(ny - prev[1])) newPts[wpIndex][0] = prev[0];
+               else newPts[wpIndex][1] = prev[1];
+               flow.routingPoints = newPts;
+               updateFactory(newFactory, false);
+            }
+         }
+       }
     } else if (type === 'segment' && !isAdmin && !readOnly && !isPublicView) {
        const flowId = (dragRef.current as any).flowId;
        const segIndex = (dragRef.current as any).segIndex;
@@ -937,22 +965,29 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
          const newFactory = { ...factory };
          const flow = newFactory.flows.find((f: any) => f.id === flowId);
          if (flow && flow.routingPoints) {
-            const newPts = [...flow.routingPoints.map((p: any) => [...p])];
-            const p1 = newPts[segIndex];
-            const p2 = newPts[segIndex+1];
+            let newPts = [...flow.routingPoints.map((p: any) => [...p])];
             
-            const isVertical = Math.abs(p1[0] - p2[0]) < 1; // Tolerance for floats
+            // SEGMENT SPLITTING: If dragging a single-segment path, turn it into 4 points
+            if (newPts.length === 2) {
+               const p0 = newPts[0]; const p1 = newPts[1];
+               newPts = [p0, [...p0], [...p1], p1];
+               (dragRef.current as any).segIndex = 1; // Now we are dragging the middle segment
+               (dragRef.current as any).itemStartX = p0[0];
+               (dragRef.current as any).itemStartY = p0[1];
+            }
+
+            const si = (dragRef.current as any).segIndex;
+            const p1 = newPts[si]; const p2 = newPts[si+1];
+            const isVertical = Math.abs(p1[0] - p2[0]) < 1;
 
             if (isVertical) {
-               // Move segment horizontally (adjust distance)
-               const nx = Math.round((itemStartX + dx) / 20) * 20;
-               if (segIndex > 0) newPts[segIndex][0] = nx;
-               if (segIndex + 1 < newPts.length - 1) newPts[segIndex+1][0] = nx;
+               const nx = Math.round(((dragRef.current as any).itemStartX + dx) / 20) * 20;
+               if (si > 0) newPts[si][0] = nx;
+               if (si + 1 < newPts.length - 1) newPts[si+1][0] = nx;
             } else {
-               // Move segment vertically (adjust distance)
-               const ny = Math.round((itemStartY + dy) / 20) * 20;
-               if (segIndex > 0) newPts[segIndex][1] = ny;
-               if (segIndex + 1 < newPts.length - 1) newPts[segIndex+1][1] = ny;
+               const ny = Math.round(((dragRef.current as any).itemStartY + dy) / 20) * 20;
+               if (si > 0) newPts[si][1] = ny;
+               if (si + 1 < newPts.length - 1) newPts[si+1][1] = ny;
             }
             
             flow.routingPoints = newPts;

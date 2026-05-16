@@ -74,8 +74,9 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   const [history, setHistory] = useState<any[]>([]);
   const [redoStack, setRedoStack] = useState<any[]>([]);
   const [viewState, setViewState] = useState({ zoom: 0.25, panX: 60, panY: 60, time: 0, targetZoom: 0.25, targetPanX: 60, targetPanY: 60 });
-  const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [selectedWcId, setSelectedWcId] = useState<string | null>(null);
+  const [hoveredWcId, setHoveredWcId] = useState<string | null>(null);
+  const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [adminComment, setAdminComment] = useState('');
   
   // Dynamic Parameters State
@@ -509,6 +510,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       // Draw Resolved Workstations
       resolvedWcs.forEach((wc: any) => {
           const isSelected = wc.id === selectedWcId;
+          const isHovered = wc.id === hoveredWcId;
           const _id = (wc.id || '').toLowerCase();
           const excelData = dynamicWorkstationData[_id] || dynamicWorkstationData['w' + _id] || wc.parameters || EXCEL_WORKSTATIONS['w' + _id.replace(/^w/, '')];
           
@@ -524,32 +526,98 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
           const wy = Math.max(minY, Math.min(maxY, wc.y * zoom + panY));
           // ---------------------
 
-          ctx.fillStyle = isSelected ? 'rgba(56, 189, 248, 0.1)' : 'rgba(15, 23, 42, 0.98)';
-          ctx.strokeStyle = isSelected ? '#38bdf8' : color; ctx.lineWidth = (isSelected ? 4 : 3) * zoom;
+          ctx.fillStyle = (isSelected || isHovered) ? 'rgba(56, 189, 248, 0.2)' : 'rgba(15, 23, 42, 0.98)';
+          ctx.strokeStyle = isSelected ? '#38bdf8' : (isHovered ? '#fff' : color); ctx.lineWidth = (isSelected ? 4 : 3) * zoom;
           roundRect(ctx, wx, wy, ww, wh, 8 * zoom); ctx.fill(); ctx.stroke();
 
+          // --- ADAPTIVE PARAMETER RENDERING ---
+          // Level 1: Extreme Zoom Out (< 0.4) - Just the ID inside
+          // Level 2: Medium Zoom (0.4 - 0.8) - ID inside, Status/OEE below
+          // Level 3: High Zoom (> 0.8) - Detailed parameters with labels
+          
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          const wsIdText = wc.workCenterId || wc.name || '';
+          
           if (activeFilterIds['ws_id']) { 
             ctx.fillStyle = '#ffffff'; 
-            ctx.font = `bold ${Math.max(14, 38 * zoom)}px Inter`; 
-            ctx.fillText(wc.workCenterId || wc.name || '', wx + ww / 2, wy + wh / 2); 
+            ctx.font = `bold ${Math.max(12, 36 * zoom)}px Inter`; 
+            // If very zoomed out, make ID even more prominent
+            if (zoom < 0.4) ctx.font = `bold ${Math.max(20, 48 * zoom)}px Inter`;
+            ctx.fillText(wsIdText, wx + ww / 2, wy + wh / 2); 
           }
           
-          let yOff = 35;
-          availableParameters.forEach((param, pIdx) => {
-            if (activeFilterIds[param.id]) {
+          // Render Parameters below the box
+          if (zoom > 0.4 || isHovered) {
+            let yOff = wh + 12 * zoom;
+            const paramsToRender = availableParameters.filter(p => activeFilterIds[p.id]);
+            
+            paramsToRender.forEach((param, pIdx) => {
+              // Density control: Only show OEE/Status if zoomed out
+              if (zoom < 0.7 && !isHovered && !['oee', 'status'].includes(param.id)) return;
+              
               const val = excelData?.[param.id];
               const displayVal = (val === undefined || val === null) ? 'null' : val;
               
-              const colors = ['#10b981', '#38bdf8', '#fbbf24', '#f87171', '#a78bfa'];
-              ctx.fillStyle = colors[pIdx % colors.length];
-              ctx.font = `${pIdx === 0 ? 'bold' : '600'} ${Math.max(7, (pIdx === 0 ? 14 : 12) * zoom)}px Inter`;
+              const fontSize = Math.max(7, (zoom > 1.2 ? 13 : 11) * zoom);
+              ctx.font = `${param.id === 'oee' ? 'bold' : '500'} ${fontSize}px Inter`;
               
-              let dLabel = param.id === 'oee' ? `${displayVal}% OEE` : (param.id === 'orders' ? `Orders: ${displayVal}` : `${param.label}: ${displayVal}`);
-              ctx.fillText(dLabel.toString(), wx + ww / 2, wy + wh / 2 + yOff * zoom);
-              yOff += 20;
-            }
-          });
+              let dLabel = param.id === 'oee' ? `${displayVal}% OEE` : (param.id === 'status' ? displayVal.toUpperCase() : `${param.label}: ${displayVal}`);
+              
+              ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+              
+              // Highlight colors for status
+              if (param.id === 'status') {
+                const s = displayVal.toLowerCase();
+                ctx.fillStyle = s === 'idle' ? '#fbbf24' : (s === 'down' ? '#f87171' : '#34d399');
+              } else {
+                ctx.fillStyle = isHovered ? '#fff' : 'rgba(255, 255, 255, 0.6)';
+              }
+
+              // Draw interactive card if hovered
+              if (isHovered) {
+                const metrics = ctx.measureText(dLabel.toString());
+                const padding = 6 * zoom;
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                roundRect(ctx, wx + ww/2 - metrics.width/2 - padding, wy + yOff - 2*zoom, metrics.width + padding*2, fontSize + padding, 6*zoom);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1; ctx.stroke();
+                ctx.fillStyle = '#fff';
+              }
+
+              ctx.fillText(dLabel.toString(), wx + ww / 2, wy + yOff);
+              yOff += (fontSize + 6 * zoom);
+            });
+          }
+
+          // Render High-Detail Tooltip on Hover
+          if (isHovered) {
+             const tipW = 200; const tipH = 120;
+             const tx = wx + ww + 15; const ty = wy;
+             
+             ctx.save();
+             ctx.shadowBlur = 20; ctx.shadowColor = 'rgba(0,0,0,0.5)';
+             ctx.fillStyle = 'rgba(30, 41, 59, 0.95)';
+             roundRect(ctx, tx, ty, tipW, tipH, 16); ctx.fill();
+             ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2; ctx.stroke();
+             ctx.restore();
+             
+             ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Inter'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+             ctx.fillText(wsIdText, tx + 15, ty + 15);
+             
+             ctx.fillStyle = color; ctx.beginPath(); ctx.arc(tx + tipW - 20, ty + 22, 5, 0, Math.PI*2); ctx.fill();
+             
+             ctx.font = '500 11px Inter'; ctx.fillStyle = '#94a3b8';
+             ctx.fillText('Real-time Metrics', tx + 15, ty + 35);
+             
+             let tyOff = 55;
+             availableParameters.slice(0, 4).forEach(p => {
+               const v = excelData?.[p.id] || 'N/A';
+               ctx.fillStyle = '#cbd5e1'; ctx.font = '600 11px Inter';
+               ctx.fillText(`${p.label}:`, tx + 15, ty + tyOff);
+               ctx.fillStyle = '#fff'; ctx.fillText(v.toString(), tx + 100, ty + tyOff);
+               tyOff += 18;
+             });
+          }
         });
       });
 
@@ -612,7 +680,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
 
       drawPathWithArrow(path, flowColor, true, { w: to.width * zoom, h: to.height * zoom });
     });
-  }, [factory, viewState, showGrid, activeFilterIds, dynamicWorkstationData, selectedAreaId, selectedWcId, isAdmin, isPublicView]);
+  }, [factory, viewState, showGrid, activeFilterIds, dynamicWorkstationData, selectedAreaId, selectedWcId, isAdmin, isPublicView, hoveredWcId]);
 
   const selectedArea = factory.areas.find((a: any) => a.id === (selectedAreaId || ''));
   const selectedWc = factory.areas.flatMap((a: any) => a.lines.flatMap((l: any) => l.workCenters)).find((w: any) => w.id === (selectedWcId || ''));
@@ -654,6 +722,32 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (!canvasRef.current || !factory) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    // Hover Detection
+    let foundHover = null;
+    const { zoom, panX, panY } = viewState;
+    for (const area of factory.areas) {
+      for (const line of area.lines) {
+        for (const wc of line.workCenters) {
+          const wx = wc.x * zoom + panX;
+          const wy = wc.y * zoom + panY;
+          const ww = wc.width * zoom;
+          const wh = wc.height * zoom;
+          if (mx >= wx && mx <= wx + ww && my >= wy && my <= wy + wh) {
+            foundHover = wc.id;
+            break;
+          }
+        }
+        if (foundHover) break;
+      }
+      if (foundHover) break;
+    }
+    setHoveredWcId(foundHover);
+
     if (!dragRef.current) return;
     const { type, itemStartX, itemStartY, areaId, id } = dragRef.current;
     const dx = (e.clientX - dragRef.current.startX) / (type === 'pan' ? 1 : viewState.zoom);

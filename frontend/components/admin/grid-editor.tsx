@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { ZoomIn, ZoomOut, Maximize2, Grid3x3, Undo2, Redo2, RotateCcw, Save, ArrowLeft, ArrowRight, Minus, CornerDownRight, Navigation, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity, AlertCircle, CheckSquare, CheckCircle2, XCircle, Send, Search, Checkbox, Plus, Trash2, FileImage, FileType } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Grid3x3, Undo2, Redo2, RotateCcw, Save, ArrowLeft, ArrowRight, Minus, CornerDownRight, Navigation, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity, AlertCircle, CheckSquare, CheckCircle2, XCircle, Send, Search, Plus, Trash2, FileImage, FileType } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { jsPDF } from 'jspdf';
 import {
@@ -64,7 +64,7 @@ const EXCEL_WORKSTATIONS: Record<string, any> = {
   w27: { ws_id: 'W27', process: 'Dispatch', machine: 'Conveyor', status: 'Running', oee: '96', orders: 'ORD-027' },
 };
 
-export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly = false, layoutId = null }: GridEditorProps) {
+export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin = false, readOnly = false, layoutId = null }: GridEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number>(0);
@@ -317,7 +317,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
           const rowData = { ...(wc.parameters || {}) };
           
           // 2. Map current editor values to specific headers
-          headers.forEach(header => {
+          headers.forEach((header: string) => {
             const h = header.toLowerCase();
             
             // Factory Level
@@ -354,7 +354,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
           });
 
           // 3. Construct CSV row based on header order
-          const values = headers.map(header => {
+          const values = headers.map((header: string) => {
             const val = rowData[header];
             if (val === undefined || val === null) return '';
             const valStr = val.toString();

@@ -98,11 +98,13 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
         const res = await fetch('http://localhost:4000/api/parameters/sync');
         if (res.ok) {
           const data = await res.json();
-          const params = data.parameters.map((p: any) => ({
-            id: p.COLUMN_NAME.toLowerCase(),
-            label: p.COLUMN_NAME,
-            description: `SQL Column: ${p.DATA_TYPE}`
-          }));
+          const params = data.parameters
+            .filter((p: any) => p.visible === 'true')
+            .map((p: any) => ({
+              id: p.id,
+              label: p.label,
+              description: `Type: ${p.type}`
+            }));
           setAvailableParameters(params);
           // Auto-enable new parameters if they aren't in state
           setActiveFilterIds(prev => {
@@ -114,7 +116,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       } catch (err) {}
     };
     fetchParams();
-    const intv = setInterval(fetchParams, 10000); // Check for schema changes every 10s
+    const intv = setInterval(fetchParams, 30000); // Check for config changes every 30s
     return () => clearInterval(intv);
   }, []);
 
@@ -311,18 +313,6 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
   };
 
   useEffect(() => {
-    const fetchAll = async () => {
-      try {
-        const res = await fetch('http://localhost:4000/api/parameters/data');
-        if (res.ok) setDynamicWorkstationData(await res.json());
-      } catch (err) {}
-    };
-    fetchAll();
-    const interval = setInterval(fetchAll, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
     let lastTime = performance.now();
     const animate = (time: number) => {
       const delta = (time - lastTime) / 1000;
@@ -478,14 +468,15 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
           availableParameters.forEach((param, pIdx) => {
             if (activeFilterIds[param.id]) {
               const val = excelData?.[param.id];
-              if (val !== undefined && val !== null) {
-                const colors = ['#10b981', '#38bdf8', '#fbbf24', '#f87171', '#a78bfa'];
-                ctx.fillStyle = colors[pIdx % colors.length];
-                ctx.font = `${pIdx === 0 ? 'bold' : '600'} ${Math.max(7, (pIdx === 0 ? 14 : 12) * zoom)}px Inter`;
-                let dVal = param.id === 'oee' ? `${val}% OEE` : (param.id === 'orders' ? `Orders: ${val}` : `${param.label}: ${val}`);
-                ctx.fillText(dVal.toString(), wx + ww / 2, wy + wh / 2 + yOff * zoom);
-                yOff += 20;
-              }
+              const displayVal = (val === undefined || val === null) ? 'null' : val;
+              
+              const colors = ['#10b981', '#38bdf8', '#fbbf24', '#f87171', '#a78bfa'];
+              ctx.fillStyle = colors[pIdx % colors.length];
+              ctx.font = `${pIdx === 0 ? 'bold' : '600'} ${Math.max(7, (pIdx === 0 ? 14 : 12) * zoom)}px Inter`;
+              
+              let dLabel = param.id === 'oee' ? `${displayVal}% OEE` : (param.id === 'orders' ? `Orders: ${displayVal}` : `${param.label}: ${displayVal}`);
+              ctx.fillText(dLabel.toString(), wx + ww / 2, wy + wh / 2 + yOff * zoom);
+              yOff += 20;
             }
           });
         });

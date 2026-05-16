@@ -5,9 +5,31 @@ const fs = require('fs');
 const path = require('path');
 
 /**
- * Helper to sync DB schema to XML
+ * Helper to sync DB schema to XML (Smart Sync)
  */
 async function syncParametersToXML() {
+  const configDir = path.join(__dirname, '../../public/config');
+  if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
+  const xmlPath = path.join(configDir, 'parameters.xml');
+
+  // 1. Read existing config if it exists
+  const existingParams = new Map();
+  if (fs.existsSync(xmlPath)) {
+    const content = fs.readFileSync(xmlPath, 'utf8');
+    // Simple regex to extract parameter blocks
+    const paramRegex = /<parameter\s+visible="([^"]+)">\s*<id>([^<]+)<\/id>\s*<label>([^<]+)<\/label>\s*<type>([^<]+)<\/type>/g;
+    let match;
+    while ((match = paramRegex.exec(content)) !== null) {
+      existingParams.set(match[2].toLowerCase(), {
+        visible: match[1],
+        id: match[2],
+        label: match[3],
+        type: match[4]
+      });
+    }
+  }
+
+  // 2. Fetch current columns from DB
   const pool = await getPool();
   const result = await pool.request().query(`
     SELECT COLUMN_NAME, DATA_TYPE 
@@ -15,37 +37,55 @@ async function syncParametersToXML() {
     WHERE TABLE_NAME = 'WORKSTATION_Parameters'
   `);
 
-  if (result.recordset.length === 0) return null;
+  const dbColumns = result.recordset
+    .filter(c => !['ws_parameter_id', 'ws_id', 'WS_Parameter_ID', 'WS_ID'].includes(c.COLUMN_NAME))
+    .map(c => ({
+      id: c.COLUMN_NAME.toLowerCase(),
+      label: c.COLUMN_NAME,
+      type: c.DATA_TYPE
+    }));
 
-  const columns = result.recordset
-    .filter(c => !['ws_parameter_id', 'ws_id', 'WS_Parameter_ID', 'WS_ID'].includes(c.COLUMN_NAME));
+  // 3. Merge: 
+  // - If in DB but not in XML -> Add (visible="true")
+  // - If in both -> Update type/label but keep visibility
+  // - If in XML but not in DB -> Keep (will show as null)
+  dbColumns.forEach(col => {
+    if (existingParams.has(col.id)) {
+      const existing = existingParams.get(col.id);
+      existing.label = col.label;
+      existing.type = col.type;
+    } else {
+      existingParams.set(col.id, {
+        ...col,
+        visible: "true"
+      });
+    }
+  });
 
+  // 4. Generate XML
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<parameters>\n';
-  columns.forEach(col => {
-    xml += '  <parameter>\n';
-    xml += `    <id>${col.COLUMN_NAME.toLowerCase()}</id>\n`;
-    xml += `    <label>${col.COLUMN_NAME}</label>\n`;
-    xml += `    <type>${col.DATA_TYPE}</type>\n`;
+  existingParams.forEach(p => {
+    xml += `  <parameter visible="${p.visible}">\n`;
+    xml += `    <id>${p.id}</id>\n`;
+    xml += `    <label>${p.label}</label>\n`;
+    xml += `    <type>${p.type}</type>\n`;
     xml += '  </parameter>\n';
   });
   xml += '</parameters>';
 
-  const configDir = path.join(__dirname, '../../public/config');
-  if (!fs.existsSync(configDir)) fs.mkdirSync(configDir, { recursive: true });
-  const xmlPath = path.join(configDir, 'parameters.xml');
   fs.writeFileSync(xmlPath, xml);
-  return columns;
+  return Array.from(existingParams.values());
 }
 
 /**
  * GET /api/parameters/sync
- * Manually trigger sync
+ * Manually trigger sync and return full config
  */
 router.get('/sync', async (req, res) => {
   try {
-    const columns = await syncParametersToXML();
-    if (!columns) return res.status(404).json({ error: 'Table not found' });
-    res.json({ success: true, count: columns.length, parameters: columns });
+    const parameters = await syncParametersToXML();
+    if (!parameters) return res.status(404).json({ error: 'Table not found' });
+    res.json({ success: true, count: parameters.length, parameters });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

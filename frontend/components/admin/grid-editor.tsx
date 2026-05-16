@@ -188,21 +188,25 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       try {
         const res = await fetch(`http://localhost:4000/api/parameters/data?layoutId=${layoutId}`);
         if (res.ok) {
-          setDynamicWorkstationData(await res.json());
+          const newData = await res.json();
+          setDynamicWorkstationData((prev: any) => {
+             if (JSON.stringify(prev) === JSON.stringify(newData)) return prev;
+             return newData;
+          });
         }
       } catch (err) {}
     };
 
     const initializeParams = async () => {
       if (!factory?.areas) return;
-      const allWcs = factory.areas.flatMap((a: any) => a.lines.flatMap((l: any) => l.workCenters));
+      const wcs = factory.areas.flatMap((a: any) => a.lines.flatMap((l: any) => l.workCenters));
       try {
         await fetch('http://localhost:4000/api/parameters/initialize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ layoutId, workstations: allWcs })
+          body: JSON.stringify({ layoutId, workstations: wcs })
         });
-        fetchAll(); // Refresh after init
+        fetchAll(); 
       } catch (err) {}
     };
 
@@ -210,7 +214,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     fetchAll();
     const interval = setInterval(fetchAll, 10000);
     return () => clearInterval(interval);
-  }, [layoutId, factory]);
+  }, [layoutId, factory.id]); // Use factory.id instead of factory object
 
   // 3. Automatic Re-Center on Load
   useEffect(() => {
@@ -823,7 +827,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
 
   useEffect(() => { syncLocalInputs(); }, [selectedWcId, selectedAreaId]);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (isAdmin || readOnly || isPublicView) {
       dragRef.current = { type: 'pan', id: '', startX: e.clientX, startY: e.clientY, itemStartX: viewState.panX, itemStartY: viewState.panY };
       return;
@@ -891,6 +895,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
        for (let i = 0; i < path.length - 1; i++) {
          const p1 = path[i]; const p2 = path[i+1];
          const l2 = (p2[0]-p1[0])**2 + (p2[1]-p1[1])**2;
+         if (l2 === 0) continue;
          const t = Math.max(0, Math.min(1, ((worldX-p1[0])*(p2[0]-p1[0]) + (worldY-p1[1])*(p2[1]-p1[1])) / l2));
          const dist = Math.sqrt((worldX - (p1[0] + t*(p2[0]-p1[0])))**2 + (worldY - (p1[1] + t*(p2[1]-p1[1])))**2);
          
@@ -910,9 +915,9 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
 
     dragRef.current = { type: 'pan', id: '', startX: e.clientX, startY: e.clientY, itemStartX: viewState.panX, itemStartY: viewState.panY } as any;
     setSelectedWcId(null); setSelectedFlowId(null);
-  };
+  }, [factory, allWcs, viewState, getFlowPoints, isAdmin, readOnly, isPublicView, selectedFlowId]);
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!canvasRef.current || !factory) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const mx = e.clientX - rect.left;
@@ -937,7 +942,10 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       }
       if (foundHover) break;
     }
-    setHoveredWcId(foundHover);
+    
+    if (foundHover !== hoveredWcId) {
+      setHoveredWcId(foundHover);
+    }
 
     if (!dragRef.current) return;
     const { type, itemStartX, itemStartY, areaId, id } = dragRef.current;
@@ -957,14 +965,12 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
            wc.x = Math.max(area.x, Math.min(area.x + area.width - wc.width, targetX)); 
            wc.y = Math.max(area.y, Math.min(area.y + area.height - wc.height, targetY)); 
 
-           // STICKY CONNECTIONS: Update routing points of connected flows
+           // STICKY CONNECTIONS
            newFactory.flows = (newFactory.flows || []).map((f: any) => {
               if ((f.fromWsId === id || f.toWsId === id) && f.routingPoints) {
                  const newPts = [...f.routingPoints.map((p: any) => [...p])];
                  const from = f.fromWsId === id ? wc : allWcs[f.fromWsId];
                  const to = f.toWsId === id ? wc : allWcs[f.toWsId];
-                 
-                 // Re-calculate optimized entry/exit points
                  const fdx = to.x - from.x; const fdy = to.y - from.y;
                  if (f.fromWsId === id) {
                     newPts[0] = [
@@ -986,7 +992,6 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
         }
       }
     } else if (type === 'waypoint' && !isAdmin && !readOnly && !isPublicView) {
-       // ... existing waypoint logic ...
        const flowId = (dragRef.current as any).flowId;
        const wpIndex = (dragRef.current as any).wpIndex;
        if (flowId !== undefined && wpIndex !== undefined) {
@@ -1008,42 +1013,37 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
        }
     } else if (type === 'segment' && !isAdmin && !readOnly && !isPublicView) {
        const flowId = (dragRef.current as any).flowId;
-       const segIndex = (dragRef.current as any).segIndex;
-       if (flowId !== undefined && segIndex !== undefined) {
+       const si = (dragRef.current as any).segIndex;
+       if (flowId !== undefined && si !== undefined) {
          const newFactory = { ...factory };
          const flow = newFactory.flows.find((f: any) => f.id === flowId);
          if (flow && flow.routingPoints) {
             let newPts = [...flow.routingPoints.map((p: any) => [...p])];
-            
-            // SEGMENT SPLITTING: If dragging a single-segment path, turn it into 4 points
             if (newPts.length === 2) {
                const p0 = newPts[0]; const p1 = newPts[1];
                newPts = [p0, [...p0], [...p1], p1];
-               (dragRef.current as any).segIndex = 1; // Now we are dragging the middle segment
+               (dragRef.current as any).segIndex = 1;
                (dragRef.current as any).itemStartX = p0[0];
                (dragRef.current as any).itemStartY = p0[1];
             }
-
-            const si = (dragRef.current as any).segIndex;
-            const p1 = newPts[si]; const p2 = newPts[si+1];
+            const psi = (dragRef.current as any).segIndex;
+            const p1 = newPts[psi]; const p2 = newPts[psi+1];
             const isVertical = Math.abs(p1[0] - p2[0]) < 1;
-
             if (isVertical) {
                const nx = Math.round(((dragRef.current as any).itemStartX + dx) / 20) * 20;
-               if (si > 0) newPts[si][0] = nx;
-               if (si + 1 < newPts.length - 1) newPts[si+1][0] = nx;
+               if (psi > 0) newPts[psi][0] = nx;
+               if (psi + 1 < newPts.length - 1) newPts[psi+1][0] = nx;
             } else {
                const ny = Math.round(((dragRef.current as any).itemStartY + dy) / 20) * 20;
-               if (si > 0) newPts[si][1] = ny;
-               if (si + 1 < newPts.length - 1) newPts[si+1][1] = ny;
+               if (psi > 0) newPts[psi][1] = ny;
+               if (psi + 1 < newPts.length - 1) newPts[psi+1][1] = ny;
             }
-            
             flow.routingPoints = newPts;
             updateFactory(newFactory, false);
          }
        }
     }
-  };
+  }, [factory, viewState, hoveredWcId, allWcs, isAdmin, readOnly, isPublicView]);
 
   const handleMouseUp = (e: React.MouseEvent) => { 
     if (dragRef.current && (dragRef.current as any).type !== 'pan') { 

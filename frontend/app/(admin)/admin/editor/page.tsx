@@ -138,7 +138,7 @@ export default function EditorPage() {
     router.push('/');
   };
 
-  const handleSaveFactory = async (factory: any) => {
+  const handleSaveFactory = useCallback(async (factory: any) => {
     console.log('Factory triggered save:', factory);
     
     if (!layoutId) {
@@ -148,8 +148,6 @@ export default function EditorPage() {
     }
 
     try {
-      // Determine if it's a local or backend layout based on ID format or previous load state
-      // Local IDs are usually UUIDs, backend IDs are usually numeric strings
       const isLocal = isNaN(Number(layoutId));
       const baseUrl = isLocal ? '/api' : 'http://localhost:4000/api';
 
@@ -165,9 +163,8 @@ export default function EditorPage() {
       console.log('Successfully saved layout:', result);
     } catch (err) {
       console.error('Failed saving layout:', err);
-      alert('Failed to save layout. Please check console for details.');
     }
-  };
+  }, [layoutId]);
 
   return (
     <AuthGuard>
@@ -218,17 +215,12 @@ export default function EditorPage() {
         <div className="flex flex-1 overflow-hidden">
           {isClient && !loading ? (
             <GridEditor 
+              key={layoutId}
               onSave={handleSaveFactory} 
               initialFactory={layoutData} 
               isAdmin={getCurrentUser()?.role === 'admin'} 
               layoutId={layoutId} 
-              onLayoutIdChange={(id, name) => {
-                setLayoutId(id);
-                setLayoutName(name);
-                // Update URL without refreshing
-                const newUrl = `${window.location.pathname}?id=${id}`;
-                window.history.pushState({ path: newUrl }, '', newUrl);
-              }}
+              onLayoutIdChange={handleLayoutChange}
             />
           ) : (
             <div className="flex flex-1 items-center justify-center text-slate-400 bg-[#0f172a]">

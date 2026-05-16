@@ -223,10 +223,10 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     }
   }, [factory.id]); // Trigger when layout identity changes
 
-  const allFilters = [
+  const allFilters = useMemo(() => [
     { id: 'ws_id', label: 'Workstation ID', description: 'Unique identifier' },
     ...availableParameters
-  ];
+  ], [availableParameters]);
 
   const clampFactory = (f: any) => {
     f.areas.forEach((area: any) => {
@@ -240,14 +240,14 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     return f;
   };
 
-  const updateFactory = (newFactory: any, recordHistory = true) => {
+  const updateFactory = useCallback((newFactory: any, recordHistory = true) => {
     const clamped = clampFactory({ ...newFactory });
     if (recordHistory) {
       setHistory(prev => [...prev.slice(-49), JSON.parse(JSON.stringify(factory))]);
       setRedoStack([]);
     }
     setFactory(clamped);
-  };
+  }, [factory]);
 
   const undo = useCallback(() => {
     if (history.length === 0) return;
@@ -1043,9 +1043,9 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
          }
        }
     }
-  }, [factory, viewState, hoveredWcId, allWcs, isAdmin, readOnly, isPublicView]);
+  }, [factory, viewState, hoveredWcId, allWcs, isAdmin, readOnly, isPublicView, updateFactory]);
 
-  const handleMouseUp = (e: React.MouseEvent) => { 
+  const handleMouseUp = useCallback((e: React.MouseEvent) => { 
     if (dragRef.current && (dragRef.current as any).type !== 'pan') { 
       const stateToRecord = (dragRef.current as any).initialState;
       const startX = dragRef.current.startX;
@@ -1059,7 +1059,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       syncLocalInputs(); 
     } 
     dragRef.current = null; 
-  };
+  }, [syncLocalInputs]);
 
 
 

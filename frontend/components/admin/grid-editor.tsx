@@ -779,14 +779,14 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       const flowColor = flow.id === selectedFlowId ? '#38bdf8' : (isInternal ? '#fbbf24' : '#ef4444');
       
       const flowPoints = getFlowPoints(flow, from, to, fIdx);
-      const path = flowPoints.map(pt => ({ x: pt[0] * zoom + panX, y: pt[1] * zoom + panY }));
+      const path = flowPoints.map((pt: [number, number]) => ({ x: pt[0] * zoom + panX, y: pt[1] * zoom + panY }));
 
       drawPathWithArrow(path, flowColor, true);
 
       // Render Handles for selected flow
       if (flow.id === selectedFlowId && !isPublicView && !readOnly) {
         // Render Waypoint Handles
-        path.forEach((pt, idx) => {
+        path.forEach((pt: { x: number, y: number }, idx: number) => {
           ctx.beginPath(); ctx.arc(pt.x, pt.y, 5 * zoom, 0, Math.PI * 2);
           ctx.fillStyle = '#fff'; ctx.fill();
           ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2 * zoom; ctx.stroke();

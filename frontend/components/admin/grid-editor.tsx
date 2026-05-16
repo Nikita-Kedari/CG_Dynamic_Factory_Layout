@@ -565,39 +565,55 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
              const cardH = 80 * zoom;
              const padding = 10 * zoom;
              
-             // 1. SMART POSITIONING BASED ON FLOW DIRECTION
-             // Detect outgoing flow direction for this workstation
-             const outFlow = (factory.flows || []).find((f: any) => f.fromWsId === wc.id);
-             let cardPos = 'right'; // Default
+             // 1. ADVANCED COLLISION AVOIDANCE BASED ON ALL CONNECTED FLOWS
+             // Detect all flows (incoming + outgoing)
+             const connectedFlows = (factory.flows || []).filter((f: any) => f.fromWsId === wc.id || f.toWsId === wc.id);
+             const occupiedSides = new Set<string>();
              
-             if (outFlow) {
-                const target = allWcs[outFlow.toWsId];
-                if (target) {
-                   const fdx = target.x - wc.x;
-                   const fdy = target.y - wc.y;
-                   // If flow is mostly horizontal to the right, move box ABOVE
-                   if (fdx > 50 && Math.abs(fdx) > Math.abs(fdy)) {
-                      cardPos = 'top';
-                   } 
-                   // If flow is mostly vertical downwards, keep box RIGHT
-                   else if (fdy > 50 && Math.abs(fdy) > Math.abs(fdx)) {
-                      cardPos = 'right';
+             connectedFlows.forEach((f: any) => {
+                const otherId = f.fromWsId === wc.id ? f.toWsId : f.fromWsId;
+                const other = allWcs[otherId];
+                if (other) {
+                   const fdx = other.x - wc.x;
+                   const fdy = other.y - wc.y;
+                   if (Math.abs(fdx) > Math.abs(fdy)) {
+                      if (fdx > 0) occupiedSides.add('right');
+                      else occupiedSides.add('left');
+                   } else {
+                      if (fdy > 0) occupiedSides.add('bottom');
+                      else occupiedSides.add('top');
                    }
                 }
-             }
+             });
+
+             // Determine best available side (Priority: Right > Top > Left > Bottom)
+             let cardPos = 'right';
+             if (!occupiedSides.has('right')) cardPos = 'right';
+             else if (!occupiedSides.has('top')) cardPos = 'top';
+             else if (!occupiedSides.has('left')) cardPos = 'left';
+             else if (!occupiedSides.has('bottom')) cardPos = 'bottom';
+             else cardPos = 'right'; // Fallback
 
              let cx, cy;
              if (cardPos === 'top') {
                 cx = wx + ww / 2 - cardW / 2;
                 cy = wy - cardH - 15 * zoom;
+             } else if (cardPos === 'bottom') {
+                cx = wx + ww / 2 - cardW / 2;
+                cy = wy + wh + 15 * zoom;
+             } else if (cardPos === 'left') {
+                cx = wx - cardW - 15 * zoom;
+                cy = wy + wh / 2 - cardH / 2;
              } else {
-                // Default: Right side
+                // Right side
                 cx = wx + ww + 15 * zoom;
                 cy = wy + wh / 2 - cardH / 2;
              }
 
-             // Handle canvas boundary collisions (push left if overflowing right)
-             if (cx + cardW > canvas.width - 20) cx = wx - cardW - 15 * zoom;
+             // Canvas boundary safety
+             if (cx < 20) cx = wx + ww + 15 * zoom; // Push right if too far left
+             if (cx + cardW > canvas.width - 20) cx = wx - cardW - 15 * zoom; // Push left if too far right
+             if (cy < 20) cy = wy + wh + 15 * zoom; // Push down if too high
 
              ctx.save();
              // Glassmorphism effect

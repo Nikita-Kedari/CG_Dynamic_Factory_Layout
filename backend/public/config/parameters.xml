@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<parameters>
+  <parameter visible="true">
+    <id>oee</id>
+    <label>OEE</label>
+    <type>float</type>
+  </parameter>
+  <parameter visible="true">
+    <id>orders</id>
+    <label>Orders</label>
+    <type>varchar</type>
+  </parameter>
+  <parameter visible="true">
+    <id>status</id>
+    <label>Status</label>
+    <type>varchar</type>
+  </parameter>
+</parameters>

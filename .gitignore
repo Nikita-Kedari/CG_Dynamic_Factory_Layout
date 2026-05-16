@@ -31,5 +31,4 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Generated Configs
-backend/public/config/parameters.xml
+

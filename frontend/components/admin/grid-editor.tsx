@@ -315,10 +315,18 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     const canvas = canvasRef.current;
     if (!canvas || !factory?.areas) return;
     
+    const originalWidth = canvas.width;
+    const originalHeight = canvas.height;
     const originalViewState = { ...viewState };
-    setIsCapturing(true); // Enable capture mode to force parameter visibility
     
-    // 1. Calculate the actual bounding box of the physical layout (areas)
+    // 1. Boost resolution for capture (3x supersampling for readability)
+    const multiplier = 3;
+    canvas.width = originalWidth * multiplier;
+    canvas.height = originalHeight * multiplier;
+    
+    setIsCapturing(true);
+    
+    // 2. Calculate the actual bounding box
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     factory.areas.forEach((a: any) => {
       minX = Math.min(minX, a.x);
@@ -330,14 +338,14 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
     if (minX !== Infinity) {
       const layoutW = maxX - minX;
       const layoutH = maxY - minY;
-      const margin = 60; // Slightly more margin for labels during capture
+      const margin = 100; // Larger margin for the high-res capture
       
       const scale = Math.min(
         (canvas.width - margin * 2) / layoutW,
         (canvas.height - margin * 2) / layoutH
       );
       
-      const captureZoom = Math.max(0.1, Math.min(scale, 3.0));
+      const captureZoom = Math.max(0.1, Math.min(scale, 5.0));
       const capturePanX = (canvas.width - layoutW * captureZoom) / 2 - minX * captureZoom;
       const capturePanY = (canvas.height - layoutH * captureZoom) / 2 - minY * captureZoom;
 
@@ -352,7 +360,7 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
       }));
     }
     
-    // Wait for the render loop to settle
+    // Wait for the render loop to settle on the high-res canvas
     setTimeout(() => {
       if (format === 'png') {
         const link = document.createElement('a');
@@ -370,9 +378,12 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
         pdf.save(`${factory.name || 'factory_layout'}.pdf`);
       }
       
-      setIsCapturing(false); // Restore normal mode
+      // Restore original resolution and state
+      canvas.width = originalWidth;
+      canvas.height = originalHeight;
+      setIsCapturing(false);
       setViewState(originalViewState);
-    }, 1200);
+    }, 1500);
   };
 
   const getShareUrl = () => {
@@ -545,43 +556,45 @@ export function GridEditor({ onSave, initialFactory, isAdmin = false, readOnly =
           const shouldShowCard = zoom > 0.8 || isHovered || isCapturing;
           
           if (shouldShowCard) {
-             const cardW = 180 * zoom; 
-             const cardH = 100 * zoom;
-             const padding = 12 * zoom;
-             const cx = wx + ww + 10 * zoom; 
-             const cy = wy;
+             const cardW = 160 * zoom; 
+             const cardH = 80 * zoom;
+             const padding = 10 * zoom;
+             // Position ABOVE the workstation box to avoid side flow arrows
+             const cx = wx + ww / 2 - cardW / 2; 
+             const cy = wy - cardH - 12 * zoom;
 
              ctx.save();
-             ctx.shadowBlur = 15 * zoom; ctx.shadowColor = 'rgba(0,0,0,0.3)';
-             ctx.fillStyle = isHovered ? 'rgba(30, 41, 59, 0.98)' : 'rgba(15, 23, 42, 0.85)';
-             roundRect(ctx, cx, cy, cardW, cardH, 12 * zoom); ctx.fill();
-             ctx.strokeStyle = isHovered ? '#38bdf8' : 'rgba(255,255,255,0.15)'; 
-             ctx.lineWidth = 1.5 * zoom; ctx.stroke();
+             // Semi-transparent background to maintain visibility of underlying flows
+             ctx.shadowBlur = 10 * zoom; ctx.shadowColor = 'rgba(0,0,0,0.2)';
+             ctx.fillStyle = isHovered ? 'rgba(30, 41, 59, 0.95)' : 'rgba(15, 23, 42, 0.75)';
+             roundRect(ctx, cx, cy, cardW, cardH, 10 * zoom); ctx.fill();
+             ctx.strokeStyle = isHovered ? '#38bdf8' : 'rgba(255,255,255,0.1)'; 
+             ctx.lineWidth = 1 * zoom; ctx.stroke();
              ctx.restore();
 
              // Card Header
-             const headerFS = isCapturing ? (16 * zoom) : Math.max(10, 16 * zoom);
+             const headerFS = isCapturing ? (13 * zoom) : Math.max(9, 13 * zoom);
              ctx.fillStyle = '#fff'; ctx.font = `bold ${headerFS}px Inter`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
              ctx.fillText(wsIdText, cx + padding, cy + padding);
              
-             ctx.fillStyle = color; ctx.beginPath(); ctx.arc(cx + cardW - padding - 4*zoom, cy + padding + 6*zoom, 4 * zoom, 0, Math.PI*2); ctx.fill();
+             ctx.fillStyle = color; ctx.beginPath(); ctx.arc(cx + cardW - padding - 3*zoom, cy + padding + 5*zoom, 3 * zoom, 0, Math.PI*2); ctx.fill();
              
-             let tyOff = padding + 22 * zoom;
+             let tyOff = padding + 18 * zoom;
              const visibleParams = availableParameters.filter(p => activeFilterIds[p.id]);
              
-             visibleParams.slice(0, 4).forEach(p => {
+             visibleParams.slice(0, 3).forEach(p => {
                const v = excelData?.[p.id] || 'N/A';
                const displayVal = (p.id === 'oee') ? `${v}%` : v.toString();
                
-               const labelFS = isCapturing ? (11 * zoom) : Math.max(8, 11 * zoom);
-               ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = `600 ${labelFS}px Inter`;
+               const labelFS = isCapturing ? (9 * zoom) : Math.max(7, 9 * zoom);
+               ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = `600 ${labelFS}px Inter`;
                ctx.fillText(`${p.label}:`, cx + padding, cy + tyOff);
                
                ctx.fillStyle = '#fff'; ctx.font = `bold ${labelFS}px Inter`;
                const labelWidth = ctx.measureText(`${p.label}:`).width;
-               ctx.fillText(displayVal, cx + padding + labelWidth + 5*zoom, cy + tyOff);
+               ctx.fillText(displayVal, cx + padding + labelWidth + 4*zoom, cy + tyOff);
                
-               tyOff += 16 * zoom;
+               tyOff += 14 * zoom;
              });
           }
         });

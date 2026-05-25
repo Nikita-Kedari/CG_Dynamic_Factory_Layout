@@ -64,6 +64,163 @@ const EXCEL_WORKSTATIONS: Record<string, any> = {
   w27: { ws_id: 'W27', process: 'Dispatch', machine: 'Conveyor', status: 'Running', oee: '96', orders: 'ORD-027' },
 };
 
+const findOrthogonalPath = (
+  from: any,
+  to: any,
+  fx: number,
+  fy: number,
+  tx: number,
+  ty: number,
+  fIdx: number,
+  allWcsList: any[],
+  getWcVisualSize: (wc: any) => { width: number; height: number }
+): [number, number][] => {
+  const obstacles = allWcsList;
+  const allX = new Set<number>([fx, tx]);
+  const allY = new Set<number>([fy, ty]);
+
+  obstacles.forEach((wc) => {
+    const { width: w, height: h } = getWcVisualSize(wc);
+    const offset = 15 + (fIdx % 4) * 8;
+    allX.add(wc.x - offset);
+    allX.add(wc.x + w + offset);
+    allY.add(wc.y - offset);
+    allY.add(wc.y + h + offset);
+    allX.add(wc.x + w / 2);
+    allY.add(wc.y + h / 2);
+  });
+
+  const xs = Array.from(allX).sort((a, b) => a - b);
+  const ys = Array.from(allY).sort((a, b) => a - b);
+
+  const startI = xs.indexOf(fx);
+  const startJ = ys.indexOf(fy);
+  const endI = xs.indexOf(tx);
+  const endJ = ys.indexOf(ty);
+
+  if (startI === -1 || startJ === -1 || endI === -1 || endJ === -1) {
+    return [[fx, fy], [tx, ty]];
+  }
+
+  const closed = new Set<string>();
+  const gScore: Record<string, number> = {};
+  const parent: Record<string, string> = {};
+  const dirMap: Record<string, 'H' | 'V' | null> = {};
+
+  const startKey = `${startI},${startJ}`;
+  gScore[startKey] = 0;
+  dirMap[startKey] = null;
+
+  const openList: { i: number; j: number; f: number }[] = [{ i: startI, j: startJ, f: Math.abs(fx - tx) + Math.abs(fy - ty) }];
+
+  while (openList.length > 0) {
+    openList.sort((a, b) => a.f - b.f);
+    const curr = openList.shift()!;
+    const currKey = `${curr.i},${curr.j}`;
+
+    if (curr.i === endI && curr.j === endJ) {
+      const path: [number, number][] = [];
+      let tempKey = currKey;
+      while (tempKey) {
+        const [iStr, jStr] = tempKey.split(',');
+        const i = parseInt(iStr);
+        const j = parseInt(jStr);
+        path.push([xs[i], ys[j]]);
+        tempKey = parent[tempKey];
+      }
+      path.reverse();
+
+      const optimized: [number, number][] = [path[0]];
+      for (let k = 1; k < path.length - 1; k++) {
+        const prev = optimized[optimized.length - 1];
+        const next = path[k + 1];
+        const p = path[k];
+        if ((prev[0] === p[0] && p[0] === next[0]) || (prev[1] === p[1] && p[1] === next[1])) {
+          continue;
+        }
+        optimized.push(p);
+      }
+      optimized.push(path[path.length - 1]);
+      return optimized;
+    }
+
+    closed.add(currKey);
+
+    const currX = xs[curr.i];
+    const currY = ys[curr.j];
+    const currG = gScore[currKey];
+    const currDir = dirMap[currKey];
+
+    const neighbors = [
+      { ni: curr.i + 1, nj: curr.j, ndir: 'H' as const },
+      { ni: curr.i - 1, nj: curr.j, ndir: 'H' as const },
+      { ni: curr.i, nj: curr.j + 1, ndir: 'V' as const },
+      { ni: curr.i, nj: curr.j - 1, ndir: 'V' as const }
+    ];
+
+    for (const { ni, nj, ndir } of neighbors) {
+      if (ni < 0 || ni >= xs.length || nj < 0 || nj >= ys.length) continue;
+      const neighborKey = `${ni},${nj}`;
+      if (closed.has(neighborKey)) continue;
+
+      const nx = xs[ni];
+      const ny = ys[nj];
+
+      const dist = Math.abs(nx - currX) + Math.abs(ny - currY);
+      let penalty = 0;
+
+      const cx1 = currX + Math.sign(nx - currX) * 2;
+      const cy1 = currY + Math.sign(ny - currY) * 2;
+      const cx2 = nx - Math.sign(nx - currX) * 2;
+      const cy2 = ny - Math.sign(ny - currY) * 2;
+
+      for (const wc of obstacles) {
+        if (wc.id === from.id || wc.id === to.id) continue;
+        const { width: w, height: h } = getWcVisualSize(wc);
+        const rx1 = wc.x - 2;
+        const rx2 = wc.x + w + 2;
+        const ry1 = wc.y - 2;
+        const ry2 = wc.y + h + 2;
+
+        if (ndir === 'H') {
+          const minX = Math.min(cx1, cx2);
+          const maxX = Math.max(cx1, cx2);
+          if (cy1 >= ry1 && cy1 <= ry2 && minX < rx2 && maxX > rx1) {
+            penalty += 1000000;
+          }
+        } else {
+          const minY = Math.min(cy1, cy2);
+          const maxY = Math.max(cy1, cy2);
+          if (cx1 >= rx1 && cx1 <= rx2 && minY < ry2 && maxY > ry1) {
+            penalty += 1000000;
+          }
+        }
+      }
+
+      const turnPenalty = (currDir !== null && currDir !== ndir) ? 200 : 0;
+      const tentG = currG + dist + penalty + turnPenalty;
+
+      if (gScore[neighborKey] === undefined || tentG < gScore[neighborKey]) {
+        gScore[neighborKey] = tentG;
+        parent[neighborKey] = currKey;
+        dirMap[neighborKey] = ndir;
+
+        const h = Math.abs(nx - tx) + Math.abs(ny - ty);
+        const f = tentG + h;
+
+        const existing = openList.find((node) => node.i === ni && node.j === nj);
+        if (existing) {
+          existing.f = f;
+        } else {
+          openList.push({ i: ni, j: nj, f });
+        }
+      }
+    }
+  }
+
+  return [[fx, fy], [tx, fy], [tx, ty]];
+};
+
 export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin = false, readOnly = false, layoutId = null }: GridEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -159,6 +316,24 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     return { width, height, maxVisible };
   }, [availableParameters, activeFilterIds, getWcExcelData, viewState.zoom, isCapturing]);
 
+  const checkCollision = useCallback((x: number, y: number, wcId: string, w: number, h: number, ignoreIds = new Set<string>()) => {
+    if (!factory) return null;
+    for (const area of factory.areas) {
+      for (const line of area.lines || []) {
+        for (const other of line.workCenters || []) {
+          if (other.id === wcId || ignoreIds.has(other.id)) continue;
+          const { width: otherW, height: otherH } = getWcVisualSize(other);
+          const xOverlap = x < other.x + otherW + 10 && x + w + 10 > other.x;
+          const yOverlap = y < other.y + otherH + 10 && y + h + 10 > other.y;
+          if (xOverlap && yOverlap) {
+            return other;
+          }
+        }
+      }
+    }
+    return null;
+  }, [factory, getWcVisualSize]);
+
   const getFlowPoints = useCallback((flow: any, from: any, to: any, fIdx: number) => {
     if (!from || !to) return [];
 
@@ -211,17 +386,23 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       tx = (to.x + toSize.width / 2); ty = (dy > 0 ? to.y : (to.y + toSize.height));
     }
 
-    const path: [number, number][] = [[fx, fy]];
-    if (isInternal || dist < 500) {
-      if (Math.abs(fy - ty) < 20 || Math.abs(fx - tx) < 20) path.push([tx, ty]);
-      else { path.push([tx, fy]); path.push([tx, ty]); }
-    } else {
-      const useTop = dy < 0;
-      const perimeterY = useTop ? (from.area.y - 40 - laneSpace) : (from.area.y + from.area.height + 40 + laneSpace);
-      path.push([fx, perimeterY]); path.push([tx, perimeterY]); path.push([tx, ty]);
+    // Try obstacle-aware orthogonal pathfinding first
+    try {
+      const allWcsList = Object.values(allWcs);
+      return findOrthogonalPath(from, to, fx, fy, tx, ty, fIdx, allWcsList, getWcVisualSize);
+    } catch (e) {
+      const path: [number, number][] = [[fx, fy]];
+      if (isInternal || dist < 500) {
+        if (Math.abs(fy - ty) < 20 || Math.abs(fx - tx) < 20) path.push([tx, ty]);
+        else { path.push([tx, fy]); path.push([tx, ty]); }
+      } else {
+        const useTop = dy < 0;
+        const perimeterY = useTop ? (from.area.y - 40 - laneSpace) : (from.area.y + from.area.height + 40 + laneSpace);
+        path.push([fx, perimeterY]); path.push([tx, perimeterY]); path.push([tx, ty]);
+      }
+      return path;
     }
-    return path;
-  }, [getWcVisualSize]);
+  }, [getWcVisualSize, allWcs]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1225,10 +1406,51 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       }
       if (wc && area) {
         const targetX = itemStartX + dx; const targetY = itemStartY + dy;
-        // Allow free dragging within area bounds (ignore strict collision padding)
         const { width: visualW, height: visualH } = getWcVisualSize(wc);
-        wc.x = Math.max(area.x, Math.min(area.x + area.width - visualW, targetX));
-        wc.y = Math.max(area.y, Math.min(area.y + area.height - visualH, targetY));
+
+        const clampedTargetX = Math.max(area.x, Math.min(area.x + area.width - visualW, targetX));
+        const clampedTargetY = Math.max(area.y, Math.min(area.y + area.height - visualH, targetY));
+
+        const startX = wc.x;
+        const startY = wc.y;
+
+        // Try moving X first
+        let nextX = startX;
+        if (clampedTargetX !== startX) {
+          const collWc = checkCollision(clampedTargetX, startY, wc.id, visualW, visualH);
+          if (!collWc) {
+            nextX = clampedTargetX;
+          } else {
+            const otherWcSize = getWcVisualSize(collWc);
+            const closestX = clampedTargetX > startX
+              ? collWc.x - visualW - 10
+              : collWc.x + otherWcSize.width + 10;
+            
+            if (closestX >= area.x && closestX <= area.x + area.width - visualW && !checkCollision(closestX, startY, wc.id, visualW, visualH)) {
+              nextX = closestX;
+            }
+          }
+        }
+        wc.x = nextX;
+
+        // Try moving Y second
+        let nextY = startY;
+        if (clampedTargetY !== startY) {
+          const collWc = checkCollision(wc.x, clampedTargetY, wc.id, visualW, visualH);
+          if (!collWc) {
+            nextY = clampedTargetY;
+          } else {
+            const otherWcSize = getWcVisualSize(collWc);
+            const closestY = clampedTargetY > startY
+              ? collWc.y - visualH - 10
+              : collWc.y + otherWcSize.height + 10;
+            
+            if (closestY >= area.y && closestY <= area.y + area.height - visualH && !checkCollision(wc.x, closestY, wc.id, visualW, visualH)) {
+              nextY = closestY;
+            }
+          }
+        }
+        wc.y = nextY;
 
         // STICKY CONNECTIONS
         newFactory.flows = (newFactory.flows || []).map((f: any) => {
@@ -1348,13 +1570,23 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       factory.csvHeaders.forEach((h: string) => parameters[h] = '');
     }
 
+    let targetX = area.x + 50;
+    let targetY = area.y + 100;
+    while (checkCollision(targetX, targetY, '', 100, 100)) {
+      targetX += 110;
+      if (targetX + 100 > area.x + area.width) {
+        targetX = area.x + 50;
+        targetY += 110;
+      }
+    }
+
     const newWc = {
       id: wsId,
       workCenterId: `W${area.lines[0].workCenters.length + 1}`,
       name: `WS ${area.lines[0].workCenters.length + 1}`,
       machineName: `WS ${area.lines[0].workCenters.length + 1}`,
-      x: area.x + 50,
-      y: area.y + 100,
+      x: targetX,
+      y: targetY,
       width: 100,
       height: 100,
       status: 'Running',
@@ -1379,11 +1611,144 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
   };
 
   const autoLayoutArea = (area: any, type: string) => {
-    const wcs = area.lines[0].workCenters; const startX = area.x + 80; const startY = area.y + 100; const step = 140;
-    if (type === 'Straight') { wcs.forEach((wc: any, i: number) => { wc.x = startX + i * step; wc.y = startY + 120; }); }
-    else if (type === 'L-Type') { const mid = Math.ceil(wcs.length / 2); wcs.forEach((wc: any, i: number) => { if (i < mid) { wc.x = startX; wc.y = startY + i * step; } else { wc.x = startX + (i - mid + 1) * step; wc.y = startY + (mid - 1) * step; } }); }
-    else if (type === 'U-Type') { const seg = Math.ceil(wcs.length / 3); wcs.forEach((wc: any, i: number) => { if (i < seg) { wc.x = startX; wc.y = startY + i * step; } else if (i < 2 * seg) { wc.x = startX + (i - seg + 1) * step; wc.y = startY + (seg - 1) * step; } else { wc.x = startX + (seg) * step; wc.y = startY + (seg - 1) * step - (i - 2 * seg + 1) * step; } }); }
-    else if (type === 'Inverted-U') { const seg = Math.ceil(wcs.length / 3); wcs.forEach((wc: any, i: number) => { if (i < seg) { wc.x = startX; wc.y = startY + (seg - 1) * step - i * step; } else if (i < 2 * seg) { wc.x = startX + (i - seg + 1) * step; wc.y = startY; } else { wc.x = startX + (seg) * step; wc.y = startY + (i - 2 * seg + 1) * step; } }); }
+    const wcs = area.lines[0].workCenters;
+    const startX = area.x + 80;
+    const startY = area.y + 100;
+
+    if (type === 'Straight') {
+      let currentX = startX;
+      wcs.forEach((wc: any) => {
+        const { width: w } = getWcVisualSize(wc);
+        wc.x = currentX;
+        wc.y = startY + 120;
+        currentX += w + 10;
+      });
+    } else if (type === 'L-Type') {
+      const mid = Math.ceil(wcs.length / 2);
+      let currentY = startY;
+      let maxColW = 0;
+      wcs.forEach((wc: any, i: number) => {
+        const { width: w, height: h } = getWcVisualSize(wc);
+        if (i < mid) {
+          wc.x = startX;
+          wc.y = currentY;
+          currentY += h + 10;
+          maxColW = Math.max(maxColW, w);
+        }
+      });
+      const cornerY = mid > 0 ? wcs[mid - 1].y : startY;
+      let currentX = startX + maxColW + 10;
+      wcs.forEach((wc: any, i: number) => {
+        const { width: w } = getWcVisualSize(wc);
+        if (i >= mid) {
+          wc.x = currentX;
+          wc.y = cornerY;
+          currentX += w + 10;
+        }
+      });
+    } else if (type === 'U-Type') {
+      const seg = Math.ceil(wcs.length / 3);
+      let currentY = startY;
+      let maxColW1 = 0;
+      wcs.forEach((wc: any, i: number) => {
+        const { width: w, height: h } = getWcVisualSize(wc);
+        if (i < seg) {
+          wc.x = startX;
+          wc.y = currentY;
+          currentY += h + 10;
+          maxColW1 = Math.max(maxColW1, w);
+        }
+      });
+      const bottomY = seg > 0 ? wcs[seg - 1].y : startY;
+      let currentX = startX + maxColW1 + 10;
+      wcs.forEach((wc: any, i: number) => {
+        const { width: w } = getWcVisualSize(wc);
+        if (i >= seg && i < 2 * seg) {
+          wc.x = currentX;
+          wc.y = bottomY;
+          currentX += w + 10;
+        }
+      });
+      const lastX = currentX;
+      let upY = bottomY;
+      wcs.forEach((wc: any, i: number) => {
+        const { height: h } = getWcVisualSize(wc);
+        if (i >= 2 * seg) {
+          upY -= h + 10;
+          wc.x = lastX;
+          wc.y = upY;
+        }
+      });
+    } else if (type === 'Inverted-U') {
+      const seg = Math.ceil(wcs.length / 3);
+      let totalH1 = 0;
+      let maxColW1 = 0;
+      wcs.forEach((wc: any, i: number) => {
+        if (i < seg) {
+          const { width: w, height: h } = getWcVisualSize(wc);
+          totalH1 += h + 10;
+          maxColW1 = Math.max(maxColW1, w);
+        }
+      });
+      let currentY = startY + totalH1;
+      wcs.forEach((wc: any, i: number) => {
+        if (i < seg) {
+          const { height: h } = getWcVisualSize(wc);
+          currentY -= h + 10;
+          wc.x = startX;
+          wc.y = currentY;
+        }
+      });
+      const topY = seg > 0 ? wcs[seg - 1].y : startY;
+      let currentX = startX + maxColW1 + 10;
+      wcs.forEach((wc: any, i: number) => {
+        const { width: w } = getWcVisualSize(wc);
+        if (i >= seg && i < 2 * seg) {
+          wc.x = currentX;
+          wc.y = topY;
+          currentX += w + 10;
+        }
+      });
+      const lastX = currentX;
+      let downY = topY;
+      wcs.forEach((wc: any, i: number) => {
+        const { height: h } = getWcVisualSize(wc);
+        if (i >= 2 * seg) {
+          wc.x = lastX;
+          wc.y = downY;
+          downY += h + 10;
+        }
+      });
+    } else if (type === 'S-Line') {
+      const colCount = 3;
+      const rows: any[][] = [];
+      wcs.forEach((wc: any, i: number) => {
+        const r = Math.floor(i / colCount);
+        if (!rows[r]) rows[r] = [];
+        rows[r].push(wc);
+      });
+      let currentY = startY;
+      rows.forEach((row, r) => {
+        let maxH = 0;
+        row.forEach((wc) => {
+          maxH = Math.max(maxH, getWcVisualSize(wc).height);
+        });
+        const isRight = r % 2 === 0;
+        let currentX = isRight ? startX : startX + colCount * 140;
+        row.forEach((wc) => {
+          const { width: w } = getWcVisualSize(wc);
+          if (isRight) {
+            wc.x = currentX;
+            currentX += w + 10;
+          } else {
+            currentX -= w + 10;
+            wc.x = currentX;
+          }
+          wc.y = currentY;
+        });
+        currentY += maxH + 40;
+      });
+    }
   };
 
   const updateSelectedItem = (key: string, rawVal: string) => {
@@ -1719,6 +2084,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
                         <option value="L-Type">L Type</option>
                         <option value="U-Type">U Type</option>
                         <option value="Inverted-U">Inverted U Type</option>
+                        <option value="S-Line">S Line Type</option>
                       </select>
                     </div>
                   )}

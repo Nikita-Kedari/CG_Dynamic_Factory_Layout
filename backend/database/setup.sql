@@ -382,6 +382,28 @@ VALUES
     (@ws2, @ws3, 3.5, 'Conveyor', 12);
 GO
 
+-- ─────────────────────────────────────────────
+-- 14. USERS
+-- ─────────────────────────────────────────────
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'USERS')
+BEGIN
+    CREATE TABLE USERS (
+        user_id          INT IDENTITY(1,1) PRIMARY KEY,
+        username         VARCHAR(100) NOT NULL UNIQUE,
+        password_hash    VARCHAR(255) NOT NULL,
+        role             VARCHAR(50)  NOT NULL, -- 'admin', 'developer', 'viewer'
+        created_at       DATETIME     DEFAULT GETDATE()
+    );
+
+    -- Seed default users: 2 developers and 1 admin (Password: password123)
+    INSERT INTO USERS (username, password_hash, role)
+    VALUES 
+        ('admin', '$2a$10$tM.K9wEms36Ww9M3QJ5t5.1z583fFvQ5wE9J7tVvJqg5jH/r6NqyS', 'admin'),
+        ('dev1', '$2a$10$tM.K9wEms36Ww9M3QJ5t5.1z583fFvQ5wE9J7tVvJqg5jH/r6NqyS', 'developer'),
+        ('dev2', '$2a$10$tM.K9wEms36Ww9M3QJ5t5.1z583fFvQ5wE9J7tVvJqg5jH/r6NqyS', 'developer');
+END
+GO
+
 PRINT 'FactoryLayoutDB setup complete.';
 
 USE FactoryLayoutDB;

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getCurrentUser, UserRole } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';
+import { UserRole } from '@/lib/types';
 
 interface AuthGuardProps {
   children: React.ReactNode;

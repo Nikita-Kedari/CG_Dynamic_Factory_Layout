@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { login, register, getMockLoginCredentials } from '@/lib/auth';
+import { login, register } from '@/lib/auth';
 import { Factory, Eye, EyeOff, AlertCircle, InfoIcon, KeyRound, UserPlus } from 'lucide-react';
 import Link from 'next/link';
 import { UserRole } from '@/lib/types';
@@ -19,8 +19,6 @@ export default function LoginPage() {
   const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-
-  const mockCredentials = getMockLoginCredentials();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,13 +68,6 @@ export default function LoginPage() {
       setError('An error occurred. Please verify backend connection and try again.');
       setIsLoading(false);
     }
-  };
-
-  const handleQuickLogin = (cred: { username: string; password: string; role: UserRole }) => {
-    setUsername(cred.username);
-    setPassword(cred.password);
-    setRole(cred.role);
-    setIsRegisterMode(false);
   };
 
   return (
@@ -217,29 +208,6 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {/* Seed Demo Credentials */}
-          <div className="mt-8 rounded-2xl border border-slate-800 bg-slate-900/40 p-5 backdrop-blur-sm">
-            <div className="mb-3 flex items-center gap-2">
-              <InfoIcon className="h-4 w-4 text-indigo-400" />
-              <p className="text-sm font-bold text-white uppercase tracking-wider">Pre-Seeded Credentials</p>
-            </div>
-            <p className="mb-4 text-xs text-slate-400">
-              Click any credential below to auto-fill the forms with standard seeded accounts:
-            </p>
-            <div className="grid grid-cols-3 gap-3">
-              {mockCredentials.map((cred) => (
-                <button
-                  key={cred.username}
-                  onClick={() => handleQuickLogin(cred)}
-                  className="rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 p-3 text-left transition-all hover:scale-102 flex flex-col justify-between"
-                >
-                  <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{cred.role}</span>
-                  <span className="text-xs font-bold text-white mt-1 truncate">{cred.username}</span>
-                  <span className="text-[9px] text-slate-500 font-medium truncate mt-0.5">pass123</span>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
 

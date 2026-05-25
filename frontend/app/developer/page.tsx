@@ -106,7 +106,7 @@ export default function DeveloperPage() {
                     </div>
                     <button 
                         onClick={() => { logout(); router.push('/'); }} 
-                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 hover:bg-slate-900 hover:text-white transition-colors"
                     >
                         <LogOut className="h-4 w-4" />
                         Logout
@@ -126,7 +126,7 @@ export default function DeveloperPage() {
                                 defining areas, lines, and machines with coordinates.
                             </p>
                         </div>
-                        <Button onClick={handleDownloadTemplate} className="mt-8 w-full bg-slate-900 hover:bg-slate-800">
+                        <Button onClick={handleDownloadTemplate} className="mt-8 w-full bg-slate-900 hover:bg-slate-950 hover:text-white">
                             <FileText className="mr-2 h-4 w-4" />
                             Download factory_layout_base.csv
                         </Button>
@@ -156,7 +156,7 @@ export default function DeveloperPage() {
                             <Button
                                 onClick={handleUpload}
                                 disabled={!file || uploading}
-                                className="w-full bg-blue-600 hover:bg-blue-700"
+                                className="w-full bg-blue-600 hover:bg-slate-900 hover:text-white"
                             >
                                 {uploading ? 'Uploading...' : 'Upload Configuration'}
                             </Button>
@@ -170,7 +170,7 @@ export default function DeveloperPage() {
                                 </div>
                                 {layoutId && (
                                     <Link href={`/admin/editor?id=${layoutId}`}>
-                                        <Button className="w-full bg-slate-900 hover:bg-slate-800">
+                                        <Button className="w-full bg-slate-900 hover:bg-slate-950 hover:text-white">
                                             Show me the layout editor
                                         </Button>
                                     </Link>
@@ -274,14 +274,14 @@ export default function DeveloperPage() {
                                                 {(!l.status || l.status === 'draft' || l.status === 'rejected' || l.status === 'pushed') ? (
                                                     <>
                                                         <Link href={`/admin/editor?id=${l.id}`}>
-                                                            <Button variant="outline" size="sm" className="text-slate-700 border-slate-200 hover:bg-slate-50">
+                                                         <Button variant="outline" size="sm" className="text-slate-700 border-slate-200 hover:bg-slate-900 hover:text-white">
                                                                 Edit
                                                             </Button>
                                                         </Link>
                                                         <Button 
                                                             onClick={() => passToAdmin(l.id)} 
                                                             size="sm" 
-                                                            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                                                            className="bg-indigo-600 hover:bg-slate-900 hover:text-white text-white"
                                                         >
                                                             {(l.status === 'rejected' || l.status === 'pushed') ? 'Re-Submit' : 'Pass to Admin'}
                                                         </Button>

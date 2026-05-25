@@ -138,7 +138,7 @@ export default function AdminPage() {
         {/* Header */}
         <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur-sm">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-            <div className="flex h-16 items-center justify-between">
+            <div className="flex flex-col sm:flex-row py-4 sm:py-0 sm:h-16 items-start sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
                   <ShieldCheck className="h-5 w-5" />
@@ -170,7 +170,7 @@ export default function AdminPage() {
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 
           {/* Quick Actions */}
-          <div className="mb-12 grid gap-6 md:grid-cols-3">
+          <div className="mb-12 grid gap-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
             {quickActions.map((action, idx) => {
               const Icon = action.icon;
               return (
@@ -195,7 +195,7 @@ export default function AdminPage() {
               <h3 className="text-xl font-bold text-slate-900">Layout Version Control</h3>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white overflow-x-auto w-full shadow-sm">
               <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-50/80">
                   <tr>

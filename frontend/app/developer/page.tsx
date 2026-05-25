@@ -95,9 +95,9 @@ export default function DeveloperPage() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 p-8">
+        <div className="min-h-screen bg-slate-50 p-4 sm:p-6 lg:p-8">
             <div className="mx-auto max-w-5xl space-y-8">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
                         <div>
                             <h1 className="text-3xl font-bold text-slate-900">Developer Portal</h1>
@@ -113,9 +113,9 @@ export default function DeveloperPage() {
                     </button>
                 </div>
 
-                <div className="grid gap-6 md:grid-cols-2">
+                <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
                     {/* Download Section */}
-                    <div className="rounded-2xl bg-white p-8 shadow-sm border border-slate-100 flex flex-col justify-between">
+                    <div className="rounded-2xl bg-white p-6 sm:p-8 shadow-sm border border-slate-100 flex flex-col justify-between">
                         <div>
                             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-100 text-blue-600 mb-6">
                                 <Download className="h-6 w-6" />
@@ -133,7 +133,7 @@ export default function DeveloperPage() {
                     </div>
 
                     {/* Upload Section */}
-                    <div className="rounded-2xl bg-white p-8 shadow-sm border border-slate-100 flex flex-col justify-between">
+                    <div className="rounded-2xl bg-white p-6 sm:p-8 shadow-sm border border-slate-100 flex flex-col justify-between">
                         <div>
                             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 mb-6">
                                 <Upload className="h-6 w-6" />
@@ -191,7 +191,7 @@ export default function DeveloperPage() {
                 {preview && (
                     <div className="rounded-2xl bg-white p-8 shadow-sm border border-slate-100">
                         <h3 className="text-lg font-bold text-slate-900 mb-4">Upload Summary</h3>
-                        <div className="overflow-hidden rounded-lg border border-slate-200">
+                        <div className="overflow-x-auto rounded-lg border border-slate-200 w-full">
                             <table className="min-w-full divide-y divide-slate-200">
                                 <thead className="bg-slate-50">
                                     <tr>
@@ -225,7 +225,7 @@ export default function DeveloperPage() {
                         </div>
                     )}
                     <h3 className="text-xl font-bold text-slate-900 mb-6">Layout Version History</h3>
-                    <div className="overflow-hidden rounded-lg border border-slate-200">
+                    <div className="overflow-x-auto rounded-lg border border-slate-200 w-full">
                         <table className="min-w-full divide-y divide-slate-200">
                             <thead className="bg-slate-50">
                                 <tr>

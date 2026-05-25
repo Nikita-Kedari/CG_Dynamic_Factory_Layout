@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { ZoomIn, ZoomOut, Maximize2, Grid3x3, Undo2, Redo2, RotateCcw, Save, ArrowLeft, ArrowRight, Minus, CornerDownRight, Navigation, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity, AlertCircle, CheckSquare, CheckCircle2, XCircle, HelpCircle, Send, Search, Plus, Trash2, FileImage, FileType } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Grid3x3, Undo2, Redo2, RotateCcw, Save, ArrowLeft, ArrowRight, Minus, CornerDownRight, Navigation, Move, X, Upload, Download, ChevronRight, ChevronDown, AlignJustify, LayoutGrid, MessageSquare, Check, Activity, AlertCircle, CheckSquare, CheckCircle2, XCircle, Send, Search, Plus, Trash2, FileImage, FileType } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { jsPDF } from 'jspdf';
 import {
@@ -68,13 +68,13 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number>(0);
-  const dragRef = useRef<{
-    type: 'pan' | 'wc' | 'area' | 'waypoint' | 'segment',
-    id: string,
-    areaId?: string,
-    startX: number,
-    startY: number,
-    itemStartX: number,
+  const dragRef = useRef<{ 
+    type: 'pan' | 'wc' | 'area' | 'waypoint' | 'segment', 
+    id: string, 
+    areaId?: string, 
+    startX: number, 
+    startY: number, 
+    itemStartX: number, 
     itemStartY: number,
     flowId?: string,
     wpIndex?: number,
@@ -93,11 +93,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
   const [isCapturing, setIsCapturing] = useState(false);
   const [adminComment, setAdminComment] = useState('');
   const [showComments, setShowComments] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [showAdminPanels, setShowAdminPanels] = useState(false);
-  const [isSpacePressed, setIsSpacePressed] = useState(false);
-  const [isPanning, setIsPanning] = useState(false);
-
+  
   const allWcs = useMemo(() => {
     const map: Record<string, any> = {};
     (factory?.areas || []).forEach((a: any) => (a.lines || []).forEach((l: any) => (l.workCenters || []).forEach((w: any) => {
@@ -110,7 +106,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
   const [availableParameters, setAvailableParameters] = useState<any[]>([]);
   const [activeFilterIds, setActiveFilterIds] = useState<Record<string, boolean>>({ ws_id: true });
   const [dynamicWorkstationData, setDynamicWorkstationData] = useState<any>({});
-
+  
   const [showGrid, setShowGrid] = useState(true);
   const [savedMsg, setSavedMsg] = useState(false);
   const [shareMsg, setShareMsg] = useState(false);
@@ -119,96 +115,22 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
   const [isEditing, setIsEditing] = useState(false);
   const editStartRef = useRef<any>(null);
 
-  const getWcExcelData = useCallback((wc: any) => {
-    if (!wc) return null;
-    const _id = wc.ws_id || wc.name;
-    return dynamicWorkstationData[_id] || dynamicWorkstationData['w' + _id] || wc.parameters || EXCEL_WORKSTATIONS['w' + _id.replace(/^w/, '')];
-  }, [dynamicWorkstationData]);
-
-  const getWcVisualSize = useCallback((wc: any) => {
-    if (!wc) return { width: 120, height: 80, maxVisible: 0 };
-    const visibleParams = availableParameters.filter(p => activeFilterIds[p.id]);
-    const numParams = visibleParams.length;
-
-    const wsIdText = wc.workCenterId || wc.name || '';
-    const excelData = getWcExcelData(wc);
-    const maxLabelValLength = visibleParams.reduce((max, p) => {
-      const v = excelData?.[p.id] || 'N/A';
-      const displayVal = (p.id === 'oee') ? `${v}%` : v.toString();
-      const lineLen = `${p.label}: ${displayVal}`.length;
-      return Math.max(max, lineLen);
-    }, wsIdText.length);
-
-    const baseW = Math.max(130, maxLabelValLength * 8.5 + 24);
-
-    let maxVisible = numParams;
-    if (!isCapturing) {
-      if (viewState.zoom < 0.5) {
-        maxVisible = 0;
-      } else if (viewState.zoom < 0.8) {
-        maxVisible = Math.min(1, numParams);
-      }
-    }
-
-    const adjustedParamsCount = Math.min(maxVisible, numParams);
-    const adjustedH = adjustedParamsCount === 0 ? 55 : 60 + adjustedParamsCount * 20;
-
-    const width = Math.min(220, Math.max(120, baseW));
-    const height = Math.min(180, Math.max(50, adjustedH));
-
-    return { width, height, maxVisible };
-  }, [availableParameters, activeFilterIds, getWcExcelData, viewState.zoom, isCapturing]);
-
   const getFlowPoints = useCallback((flow: any, from: any, to: any, fIdx: number) => {
     if (!from || !to) return [];
-
-    const fromSize = getWcVisualSize(from);
-    const toSize = getWcVisualSize(to);
-
-    if (flow.routingPoints && flow.routingPoints.length >= 2) {
-      const path: [number, number][] = [...flow.routingPoints.map((pt: any) => [pt[0], pt[1]] as [number, number])];
-      
-      const exitPt = path[1] || [to.x + toSize.width / 2, to.y + toSize.height / 2];
-      const edx = exitPt[0] - (from.x + fromSize.width / 2);
-      const edy = exitPt[1] - (from.y + fromSize.height / 2);
-      let fx, fy;
-      if (Math.abs(edx) > Math.abs(edy)) {
-        fx = edx > 0 ? (from.x + fromSize.width) : from.x;
-        fy = from.y + fromSize.height / 2;
-      } else {
-        fx = from.x + fromSize.width / 2;
-        fy = edy > 0 ? (from.y + fromSize.height) : from.y;
-      }
-      path[0] = [fx, fy];
-
-      const entryPt = path[path.length - 2] || [from.x + fromSize.width / 2, from.y + fromSize.height / 2];
-      const endx = (to.x + toSize.width / 2) - entryPt[0];
-      const endy = (to.y + toSize.height / 2) - entryPt[1];
-      let tx, ty;
-      if (Math.abs(endx) > Math.abs(endy)) {
-        tx = endx > 0 ? to.x : (to.x + toSize.width);
-        ty = to.y + toSize.height / 2;
-      } else {
-        tx = to.x + toSize.width / 2;
-        ty = endy > 0 ? to.y : (to.y + toSize.height);
-      }
-      path[path.length - 1] = [tx, ty];
-
-      return path;
-    }
+    if (flow.routingPoints && flow.routingPoints.length >= 2) return flow.routingPoints;
 
     const dx = to.x - from.x; const dy = to.y - from.y;
     const isInternal = from.area?.id === to.area?.id;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    const dist = Math.sqrt(dx*dx + dy*dy);
     const laneSpace = (fIdx % 6 + 1) * 20;
 
     let fx, fy, tx, ty;
     if (Math.abs(dx) > Math.abs(dy)) {
-      fx = (dx > 0 ? (from.x + fromSize.width) : from.x); fy = (from.y + fromSize.height / 2);
-      tx = (dx > 0 ? to.x : (to.x + toSize.width)); ty = (to.y + toSize.height / 2);
+      fx = (dx > 0 ? (from.x + from.width) : from.x); fy = (from.y + from.height / 2);
+      tx = (dx > 0 ? to.x : (to.x + to.width)); ty = (to.y + to.height / 2);
     } else {
-      fx = (from.x + fromSize.width / 2); fy = (dy > 0 ? (from.y + fromSize.height) : from.y);
-      tx = (to.x + toSize.width / 2); ty = (dy > 0 ? to.y : (to.y + toSize.height));
+      fx = (from.x + from.width / 2); fy = (dy > 0 ? (from.y + from.height) : from.y);
+      tx = (to.x + to.width / 2); ty = (dy > 0 ? to.y : (to.y + to.height));
     }
 
     const path: [number, number][] = [[fx, fy]];
@@ -216,12 +138,12 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       if (Math.abs(fy - ty) < 20 || Math.abs(fx - tx) < 20) path.push([tx, ty]);
       else { path.push([tx, fy]); path.push([tx, ty]); }
     } else {
-      const useTop = dy < 0;
+      const useTop = dy < 0; 
       const perimeterY = useTop ? (from.area.y - 40 - laneSpace) : (from.area.y + from.area.height + 40 + laneSpace);
       path.push([fx, perimeterY]); path.push([tx, perimeterY]); path.push([tx, ty]);
     }
     return path;
-  }, [getWcVisualSize]);
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -252,7 +174,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
             return next;
           });
         }
-      } catch (err) { }
+      } catch (err) {}
     };
     fetchParams();
     const intv = setInterval(fetchParams, 30000); // Check for config changes every 30s
@@ -276,11 +198,11 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
         if (res.ok) {
           const newData = await res.json();
           setDynamicWorkstationData((prev: any) => {
-            if (JSON.stringify(prev) === JSON.stringify(newData)) return prev;
-            return newData;
+             if (JSON.stringify(prev) === JSON.stringify(newData)) return prev;
+             return newData;
           });
         }
-      } catch (err) { }
+      } catch (err) {}
     };
 
     const initializeParams = async () => {
@@ -292,8 +214,8 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ layoutId, workstations: wcs })
         });
-        fetchAll();
-      } catch (err) { }
+        fetchAll(); 
+      } catch (err) {}
     };
 
     initializeParams();
@@ -370,79 +292,9 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
-          e.preventDefault();
-          setIsSpacePressed(true);
-        }
-      }
-    };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        setIsSpacePressed(false);
-      }
-    };
-    const handleBlur = () => {
-      setIsSpacePressed(false);
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('blur', handleBlur);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('blur', handleBlur);
-    };
-  }, []);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    const canvas = canvasRef.current;
-    if (!container || !canvas) return;
-
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-
-      const rect = canvas.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-
-      setViewState(p => {
-        const zoomFactor = e.deltaY > 0 ? 0.88 : 1.12;
-        const minZ = (isAdmin || readOnly || isPublicView) ? 0.15 : 0.05;
-        const maxZ = (isAdmin || readOnly || isPublicView) ? 3.0 : 5.0;
-        const nextTargetZoom = Math.max(minZ, Math.min(maxZ, p.targetZoom * zoomFactor));
-
-        if (nextTargetZoom === p.targetZoom) return p;
-
-        const worldX = (mx - p.targetPanX) / p.targetZoom;
-        const worldY = (my - p.targetPanY) / p.targetZoom;
-
-        const nextTargetPanX = mx - worldX * nextTargetZoom;
-        const nextTargetPanY = my - worldY * nextTargetZoom;
-
-        return {
-          ...p,
-          targetZoom: nextTargetZoom,
-          targetPanX: nextTargetPanX,
-          targetPanY: nextTargetPanY
-        };
-      });
-    };
-
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => {
-      container.removeEventListener('wheel', handleWheel);
-    };
-  }, [isAdmin, readOnly, isPublicView]);
-
   const handleFitToScreen = useCallback(() => {
     const canvas = canvasRef.current; if (!canvas || !factory) return;
-
+    
     // 1. Calculate the true bounding box of the layout topology
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     factory.areas.forEach((a: any) => {
@@ -464,7 +316,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     const topOffset = 40;
     const bottomOffset = isReviewMode ? 180 : 40; // Admin feedback panel is at bottom
 
-    const usableW = canvas.width - (isReviewMode ? 400 : leftOffset + 60);
+    const usableW = canvas.width - (isReviewMode ? 400 : leftOffset + 60); 
     const usableH = canvas.height - (isReviewMode ? topOffset + bottomOffset : 120);
     const usableX = isReviewMode ? 340 : leftOffset + 20;
     const usableY = isReviewMode ? topOffset + 40 : 80;
@@ -484,52 +336,6 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
 
     setViewState(prev => ({ ...prev, targetZoom, targetPanX, targetPanY }));
   }, [factory, isAdmin, readOnly, isPublicView]);
-
-  const handleZoomButton = useCallback((zoomIn: boolean) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
-
-    setViewState(p => {
-      const zoomFactor = zoomIn ? 1.2 : (1 / 1.2);
-      const minZ = (isAdmin || readOnly || isPublicView) ? 0.15 : 0.05;
-      const maxZ = (isAdmin || readOnly || isPublicView) ? 3.0 : 5.0;
-      const nextTargetZoom = Math.max(minZ, Math.min(maxZ, p.targetZoom * zoomFactor));
-
-      if (nextTargetZoom === p.targetZoom) return p;
-
-      const worldX = (cx - p.targetPanX) / p.targetZoom;
-      const worldY = (cy - p.targetPanY) / p.targetZoom;
-
-      const nextTargetPanX = cx - worldX * nextTargetZoom;
-      const nextTargetPanY = cy - worldY * nextTargetZoom;
-
-      return {
-        ...p,
-        targetZoom: nextTargetZoom,
-        targetPanX: nextTargetPanX,
-        targetPanY: nextTargetPanY
-      };
-    });
-  }, [isAdmin, readOnly, isPublicView]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) {
-        e.preventDefault();
-        if (e.key === '=' || e.key === '+') {
-          handleZoomButton(true);
-        } else if (e.key === '-') {
-          handleZoomButton(false);
-        } else if (e.key === '0') {
-          handleFitToScreen();
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleZoomButton, handleFitToScreen]);
 
   const downloadCSV = () => {
     const headers = factory.csvHeaders || [
@@ -551,16 +357,16 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
         line.workCenters.forEach((wc: any) => {
           // 1. Start with the original data from parameters to preserve all columns
           const rowData = { ...(wc.parameters || {}) };
-
+          
           // 2. Map current editor values to specific headers
           headers.forEach((header: string) => {
             const h = header.toLowerCase();
-
+            
             // Factory Level
             if (h === 'factory_name') rowData[header] = factory.name;
             if (h === 'canvas_width') rowData[header] = factory.width;
             if (h === 'canvas_length') rowData[header] = factory.height;
-
+            
             // Area Level
             if (h === 'area_name') rowData[header] = area.areaName;
             if (h === 'area_x') rowData[header] = Math.round(area.x);
@@ -568,12 +374,12 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
             if (h === 'area_width') rowData[header] = Math.round(area.width);
             if (h === 'area_length') rowData[header] = Math.round(area.height);
             if (h === 'area_code') rowData[header] = area.areaId;
-
+            
             // Line Level
             if (h === 'line_name') rowData[header] = line.lineName;
             if (h === 'line_type') rowData[header] = line.lineType || 'Straight';
             if (h === 'line_code') rowData[header] = line.lineId;
-
+            
             // Workstation Level
             if (h === 'ws_code') rowData[header] = wc.workCenterId;
             if (h === 'ws_name') rowData[header] = wc.machineName || wc.name;
@@ -615,12 +421,19 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
   const downloadBlueprint = async (format: 'png' | 'pdf') => {
     const canvas = canvasRef.current;
     if (!canvas || !factory?.areas) return;
-
+    
     const originalWidth = canvas.width;
     const originalHeight = canvas.height;
     const originalViewState = { ...viewState };
-
-    // 1. Calculate the actual bounding box of the layout
+    
+    // 1. Boost resolution for capture (3x supersampling for readability)
+    const multiplier = 3;
+    canvas.width = originalWidth * multiplier;
+    canvas.height = originalHeight * multiplier;
+    
+    setIsCapturing(true);
+    
+    // 2. Calculate the actual bounding box
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     factory.areas.forEach((a: any) => {
       minX = Math.min(minX, a.x);
@@ -632,20 +445,16 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     if (minX !== Infinity) {
       const layoutW = maxX - minX;
       const layoutH = maxY - minY;
-      const margin = 120; // Beautiful margin padding
-
-      // Force a high-quality readable zoom target for export
-      const captureZoom = 1.3;
-
-      // Dynamically size canvas to perfectly fit the layout at captureZoom
-      canvas.width = (layoutW * captureZoom) + margin * 2;
-      canvas.height = (layoutH * captureZoom) + margin * 2;
-
-      // Precisely center the layout at captureZoom
-      const capturePanX = margin - minX * captureZoom;
-      const capturePanY = margin - minY * captureZoom;
-
-      setIsCapturing(true);
+      const margin = 100; // Larger margin for the high-res capture
+      
+      const scale = Math.min(
+        (canvas.width - margin * 2) / layoutW,
+        (canvas.height - margin * 2) / layoutH
+      );
+      
+      const captureZoom = Math.max(0.1, Math.min(scale, 5.0));
+      const capturePanX = (canvas.width - layoutW * captureZoom) / 2 - minX * captureZoom;
+      const capturePanY = (canvas.height - layoutH * captureZoom) / 2 - minY * captureZoom;
 
       setViewState(prev => ({
         ...prev,
@@ -656,11 +465,9 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
         panY: capturePanY,
         targetPanY: capturePanY
       }));
-    } else {
-      setIsCapturing(true);
     }
-
-    // Wait 150ms for the render loop to draw on the resized high-res canvas
+    
+    // Wait for the render loop to settle on the high-res canvas
     setTimeout(() => {
       if (format === 'png') {
         const link = document.createElement('a');
@@ -677,13 +484,13 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
         pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
         pdf.save(`${factory.name || 'factory_layout'}.pdf`);
       }
-
+      
       // Restore original resolution and state
       canvas.width = originalWidth;
       canvas.height = originalHeight;
       setIsCapturing(false);
       setViewState(originalViewState);
-    }, 150);
+    }, 1500);
   };
 
   const getShareUrl = () => {
@@ -694,7 +501,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
   };
 
   const lastTimeRef = useRef<number>(performance.now());
-
+  
   useEffect(() => {
     const animate = (time: number) => {
       const delta = (time - lastTimeRef.current) / 1000;
@@ -702,27 +509,18 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
 
       if (delta > 0) {
         setViewState(prev => {
-          if (isCapturing) {
-            return {
-              ...prev,
-              zoom: prev.targetZoom,
-              panX: prev.targetPanX,
-              panY: prev.targetPanY,
-              time: prev.time + delta
-            };
-          }
           const smoothing = 1 - Math.exp(-15 * delta);
           const nextZoom = prev.zoom + (prev.targetZoom - prev.zoom) * smoothing;
           const nextPanX = prev.panX + (prev.targetPanX - prev.panX) * smoothing;
           const nextPanY = prev.panY + (prev.targetPanY - prev.panY) * smoothing;
-
+          
           // Only update if there is a meaningful change
           const zoomDiff = Math.abs(nextZoom - prev.zoom);
           const panXDiff = Math.abs(nextPanX - prev.panX);
           const panYDiff = Math.abs(nextPanY - prev.panY);
-
+          
           const isMoving = zoomDiff > 0.0001 || panXDiff > 0.01 || panYDiff > 0.01;
-
+          
           // We always update 'time' for the dashed flow lines, 
           // but we can snap zoom/pan if they are close enough to target
           const finalZoom = Math.abs(nextZoom - prev.targetZoom) < 0.0001 ? prev.targetZoom : nextZoom;
@@ -744,7 +542,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     };
     animationFrameRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationFrameRef.current!);
-  }, [isCapturing]);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -790,14 +588,14 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       ctx.closePath(); ctx.fillStyle = color; ctx.fill(); ctx.restore();
     };
 
-    const drawPathWithArrow = (points: { x: number, y: number }[], color: string, isDashed: boolean) => {
+    const drawPathWithArrow = (points: {x: number, y: number}[], color: string, isDashed: boolean) => {
       if (points.length < 2) return;
       const last = points[points.length - 1]; const prev = points[points.length - 2];
       const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
-
+      
       ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
       for (let i = 1; i < points.length; i++) { ctx.lineTo(points[i].x, points[i].y); }
-
+      
       ctx.strokeStyle = color; ctx.lineWidth = 4 * zoom;
       if (isDashed) { ctx.setLineDash([16 * zoom, 12 * zoom]); ctx.lineDashOffset = -viewState.time * 35 * zoom; }
       ctx.stroke(); ctx.setLineDash([]);
@@ -810,7 +608,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       const ax = area.x * zoom + panX; const ay = area.y * zoom + panY;
       const aw = area.width * zoom; const ah = area.height * zoom;
       const isSelectedArea = area.id === selectedAreaId;
-
+      
       // --- DIRECT STATE RENDERING (Match Visuals to Hitboxes) ---
       const resolvedWcs: any[] = [];
       area.lines?.forEach((line: any) => {
@@ -834,7 +632,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
         roundRect(ctx, ax, ay, aw, ah, 12 * zoom); ctx.stroke();
         ctx.restore();
       } else {
-        ctx.strokeStyle = isSelectedArea ? '#94a3b8' : '#334155'; ctx.lineWidth = (isSelectedArea ? 2 : 1.5) * zoom;
+        ctx.strokeStyle = isSelectedArea ? '#94a3b8' : '#334155'; ctx.lineWidth = (isSelectedArea ? 2 : 1.5) * zoom; 
         roundRect(ctx, ax, ay, aw, ah, 12 * zoom); ctx.stroke();
       }
 
@@ -844,7 +642,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       if (showComments && hasComment) {
         const bubbleX = ax + 20 * zoom;
         const bubbleY = ay + 45 * zoom;
-
+        
         ctx.save();
         ctx.fillStyle = 'rgba(251, 191, 36, 0.15)';
         ctx.strokeStyle = '#fbbf24';
@@ -852,7 +650,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
         roundRect(ctx, bubbleX, bubbleY, Math.min(300 * zoom, aw - 40 * zoom), 45 * zoom, 6 * zoom);
         ctx.fill();
         ctx.stroke();
-
+        
         ctx.fillStyle = '#fef08a';
         ctx.font = `italic 600 ${Math.max(9, 12 * zoom)}px Inter`;
         ctx.fillText(`💬 Comment: ${area.adminComment}`, bubbleX + 10 * zoom, bubbleY + 15 * zoom, Math.min(300 * zoom, aw - 40 * zoom) - 20 * zoom);
@@ -861,135 +659,188 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
 
       // Draw Resolved Workstations
       resolvedWcs.forEach((wc: any) => {
-        const isSelected = wc.id === selectedWcId;
-        const isHovered = wc.id === hoveredWcId;
-        const _id = (wc.id || '').toLowerCase();
-        const excelData = dynamicWorkstationData[_id] || dynamicWorkstationData['w' + _id] || wc.parameters || EXCEL_WORKSTATIONS['w' + _id.replace(/^w/, '')];
+          const isSelected = wc.id === selectedWcId;
+          const isHovered = wc.id === hoveredWcId;
+          const _id = (wc.id || '').toLowerCase();
+          const excelData = dynamicWorkstationData[_id] || dynamicWorkstationData['w' + _id] || wc.parameters || EXCEL_WORKSTATIONS['w' + _id.replace(/^w/, '')];
+          
+          const status = (excelData?.status || 'Running').toLowerCase();
+          let color = '#10b981'; if (status === 'idle') color = '#f59e0b'; else if (status === 'down' || status === 'critical') color = '#ef4444';
 
-        const status = (excelData?.status || 'Running').toLowerCase();
-        let color = '#10b981'; if (status === 'idle') color = '#f59e0b'; else if (status === 'down' || status === 'critical') color = '#ef4444';
+          const ww = wc.width * zoom; const wh = wc.height * zoom;
 
-        const { width: visualW, height: visualH, maxVisible } = getWcVisualSize(wc);
-        const ww = visualW * zoom;
-        const wh = visualH * zoom;
+          // --- BOUNDARY CLAMP ---
+          const minX = ax + 10 * zoom; const maxX = ax + aw - ww - 10 * zoom;
+          const minY = ay + 10 * zoom; const maxY = ay + ah - wh - 10 * zoom;
+          const wx = Math.max(minX, Math.min(maxX, wc.x * zoom + panX));
+          const wy = Math.max(minY, Math.min(maxY, wc.y * zoom + panY));
+          // ---------------------
 
-        // --- BOUNDARY CLAMP ---
-        const minX = ax + 10 * zoom; const maxX = ax + aw - ww - 10 * zoom;
-        const minY = ay + 10 * zoom; const maxY = ay + ah - wh - 10 * zoom;
-        const wx = Math.max(minX, Math.min(maxX, wc.x * zoom + panX));
-        const wy = Math.max(minY, Math.min(maxY, wc.y * zoom + panY));
-        // ---------------------
+          const hasWcComment = wc.adminComment && wc.adminComment.trim() !== '';
 
-        const hasWcComment = wc.adminComment && wc.adminComment.trim() !== '';
+          ctx.fillStyle = (isSelected || isHovered) ? 'rgba(56, 189, 248, 0.2)' : 'rgba(15, 23, 42, 0.98)';
+          
+          if (showComments && hasWcComment) {
+            ctx.strokeStyle = '#fbbf24'; // beautiful gold border
+            ctx.lineWidth = 4 * zoom;
+            ctx.save();
+            ctx.shadowBlur = 15 * zoom;
+            ctx.shadowColor = 'rgba(251, 191, 36, 0.6)';
+            roundRect(ctx, wx, wy, ww, wh, 8 * zoom); ctx.fill(); ctx.stroke();
+            ctx.restore();
+          } else {
+            ctx.strokeStyle = isSelected ? '#38bdf8' : (isHovered ? '#fff' : color); ctx.lineWidth = (isSelected ? 4 : 3) * zoom;
+            roundRect(ctx, wx, wy, ww, wh, 8 * zoom); ctx.fill(); ctx.stroke();
+          }
 
-        ctx.save();
-        ctx.fillStyle = (isSelected || isHovered) ? 'rgba(56, 189, 248, 0.2)' : 'rgba(15, 23, 42, 0.98)';
+          // --- ADAPTIVE PARAMETER RENDERING ---
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          const wsIdText = wc.workCenterId || wc.name || '';
+          
+          if (activeFilterIds['ws_id']) { 
+            ctx.fillStyle = '#ffffff'; 
+            // Remove Math.max floor during capture to maintain proportions
+            const idFontSize = isCapturing ? (36 * zoom) : Math.max(12, 36 * zoom);
+            ctx.font = `bold ${idFontSize}px Inter`; 
+            if (zoom < 0.4 && !isCapturing) ctx.font = `bold ${Math.max(20, 48 * zoom)}px Inter`;
+            ctx.fillText(wsIdText, wx + ww / 2, wy + wh / 2); 
+          }
+          
+          // --- PERSISTENT SIDE-CARD RENDERING (Adaptive Positioning) ---
+          const shouldShowCard = zoom > 0.8 || isHovered || isCapturing;
+          
+          if (shouldShowCard) {
+             const cardW = 160 * zoom; 
+             const cardH = 80 * zoom;
+             const padding = 10 * zoom;
+             
+             // 1. ADVANCED COLLISION AVOIDANCE BASED ON ALL CONNECTED FLOWS
+             // Detect all flows (incoming + outgoing)
+             const connectedFlows = (factory.flows || []).filter((f: any) => f.fromWsId === wc.id || f.toWsId === wc.id);
+             const occupiedSides = new Set<string>();
+             
+             connectedFlows.forEach((f: any) => {
+                const otherId = f.fromWsId === wc.id ? f.toWsId : f.fromWsId;
+                const other = allWcs[otherId];
+                if (other) {
+                   const fdx = other.x - wc.x;
+                   const fdy = other.y - wc.y;
+                   if (Math.abs(fdx) > Math.abs(fdy)) {
+                      if (fdx > 0) occupiedSides.add('right');
+                      else occupiedSides.add('left');
+                   } else {
+                      if (fdy > 0) occupiedSides.add('bottom');
+                      else occupiedSides.add('top');
+                   }
+                }
+             });
 
-        if (showComments && hasWcComment) {
-          ctx.strokeStyle = '#fbbf24'; // beautiful gold border
-          ctx.lineWidth = 4 * zoom;
-          ctx.save();
-          ctx.shadowBlur = 15 * zoom;
-          ctx.shadowColor = 'rgba(251, 191, 36, 0.6)';
-          roundRect(ctx, wx, wy, ww, wh, 8 * zoom); ctx.fill(); ctx.stroke();
-          ctx.restore();
-        } else {
-          ctx.strokeStyle = isSelected ? '#38bdf8' : (isHovered ? '#fff' : color); ctx.lineWidth = (isSelected ? 4 : 3) * zoom;
-          roundRect(ctx, wx, wy, ww, wh, 8 * zoom); ctx.fill(); ctx.stroke();
-        }
+             // Determine best available side (Priority: Right > Top > Left > Bottom)
+             let cardPos = 'right';
+             if (!occupiedSides.has('right')) cardPos = 'right';
+             else if (!occupiedSides.has('top')) cardPos = 'top';
+             else if (!occupiedSides.has('left')) cardPos = 'left';
+             else if (!occupiedSides.has('bottom')) cardPos = 'bottom';
+             else cardPos = 'right'; // Fallback
 
-        // --- INLINE RESPONSIVE CARD RENDERING ---
-        const wsIdText = wc.workCenterId || wc.name || '';
-        const idFS = Math.max(10, 13 * zoom);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = `bold ${idFS}px Inter`;
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.fillText(wsIdText, wx + 12 * zoom, wy + 10 * zoom);
+             let cx, cy;
+             if (cardPos === 'top') {
+                cx = wx + ww / 2 - cardW / 2;
+                cy = wy - cardH - 15 * zoom;
+             } else if (cardPos === 'bottom') {
+                cx = wx + ww / 2 - cardW / 2;
+                cy = wy + wh + 15 * zoom;
+             } else if (cardPos === 'left') {
+                cx = wx - cardW - 15 * zoom;
+                cy = wy + wh / 2 - cardH / 2;
+             } else {
+                // Right side
+                cx = wx + ww + 15 * zoom;
+                cy = wy + wh / 2 - cardH / 2;
+             }
 
-        // Status indicator dot
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(wx + ww - 16 * zoom, wy + 16 * zoom, 4 * zoom, 0, Math.PI * 2);
-        ctx.fill();
+             // Canvas boundary safety
+             if (cx < 20) cx = wx + ww + 15 * zoom; // Push right if too far left
+             if (cx + cardW > canvas.width - 20) cx = wx - cardW - 15 * zoom; // Push left if too far right
+             if (cy < 20) cy = wy + wh + 15 * zoom; // Push down if too high
 
-        // Divider
-        if (maxVisible > 0) {
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-          ctx.lineWidth = 1 * zoom;
-          ctx.beginPath();
-          ctx.moveTo(wx + 10 * zoom, wy + 28 * zoom);
-          ctx.lineTo(wx + ww - 10 * zoom, wy + 28 * zoom);
-          ctx.stroke();
+             ctx.save();
+             // Glassmorphism effect
+             ctx.shadowBlur = 10 * zoom; ctx.shadowColor = 'rgba(0,0,0,0.2)';
+             ctx.fillStyle = isHovered ? 'rgba(30, 41, 59, 0.95)' : 'rgba(15, 23, 42, 0.75)';
+             roundRect(ctx, cx, cy, cardW, cardH, 10 * zoom); ctx.fill();
+             ctx.strokeStyle = isHovered ? '#38bdf8' : 'rgba(255,255,255,0.1)'; 
+             ctx.lineWidth = 1 * zoom; ctx.stroke();
+             ctx.restore();
 
-          // Render Parameter Aligned Rows
-          let tyOff = 36 * zoom;
-          const visibleParams = availableParameters.filter(p => activeFilterIds[p.id]).slice(0, maxVisible);
-          visibleParams.forEach(p => {
-            const v = excelData?.[p.id] || 'N/A';
-            const displayVal = (p.id === 'oee') ? `${v}%` : v.toString();
+             // Card Content
+             const headerFS = isCapturing ? (13 * zoom) : Math.max(9, 13 * zoom);
+             ctx.fillStyle = '#fff'; ctx.font = `bold ${headerFS}px Inter`; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+             ctx.fillText(wsIdText, cx + padding, cy + padding);
+             
+             ctx.fillStyle = color; ctx.beginPath(); ctx.arc(cx + cardW - padding - 3*zoom, cy + padding + 5*zoom, 3 * zoom, 0, Math.PI*2); ctx.fill();
+             
+             let tyOff = padding + 18 * zoom;
+             const visibleParams = availableParameters.filter(p => activeFilterIds[p.id]);
+             
+             visibleParams.slice(0, 3).forEach(p => {
+               const v = excelData?.[p.id] || 'N/A';
+               const displayVal = (p.id === 'oee') ? `${v}%` : v.toString();
+               
+               const labelFS = isCapturing ? (9 * zoom) : Math.max(7, 9 * zoom);
+               ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = `600 ${labelFS}px Inter`;
+               ctx.fillText(`${p.label}:`, cx + padding, cy + tyOff);
+               
+               ctx.fillStyle = '#fff'; ctx.font = `bold ${labelFS}px Inter`;
+               const labelWidth = ctx.measureText(`${p.label}:`).width;
+               ctx.fillText(displayVal, cx + padding + labelWidth + 4*zoom, cy + tyOff);
+               
+               tyOff += 14 * zoom;
+             });
+          }
 
-            const paramFS = Math.max(8, 10 * zoom);
-            ctx.font = `600 ${paramFS}px Inter`;
+          if (showComments && hasWcComment) {
+             const cardW = 180 * zoom; 
+             const cardH = 65 * zoom;
+             const padding = 10 * zoom;
+             
+             const cx = wx + ww / 2 - cardW / 2;
+             const cy = wy - cardH - 12 * zoom;
 
-            // Key Label (Muted gray)
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'top';
-            ctx.fillText(`${p.label}:`, wx + 12 * zoom, wy + tyOff);
+             ctx.save();
+             ctx.shadowBlur = 12 * zoom; 
+             ctx.shadowColor = 'rgba(0,0,0,0.3)';
+             ctx.fillStyle = '#fef08a'; // Pastel yellow
+             roundRect(ctx, cx, cy, cardW, cardH, 8 * zoom); 
+             ctx.fill();
+             ctx.strokeStyle = '#fbbf24'; 
+             ctx.lineWidth = 1.5 * zoom; 
+             ctx.stroke();
 
-            // Value (Crisp white)
-            ctx.fillStyle = '#ffffff';
-            const labelWidth = ctx.measureText(`${p.label}:`).width;
-            ctx.fillText(displayVal, wx + 12 * zoom + labelWidth + 4 * zoom, wy + tyOff);
+             ctx.beginPath();
+             ctx.moveTo(wx + ww / 2 - 6 * zoom, wy - 12 * zoom);
+             ctx.lineTo(wx + ww / 2, wy - 4 * zoom);
+             ctx.lineTo(wx + ww / 2 + 6 * zoom, wy - 12 * zoom);
+             ctx.fillStyle = '#fef08a';
+             ctx.fill();
+             ctx.strokeStyle = '#fbbf24';
+             ctx.lineWidth = 1.5 * zoom;
+             ctx.stroke();
+             ctx.restore();
 
-            tyOff += 20 * zoom;
-          });
-        }
-        ctx.restore();
-
-        if (showComments && hasWcComment) {
-          const cardW = 180 * zoom;
-          const cardH = 65 * zoom;
-          const padding = 10 * zoom;
-
-          const cx = wx + ww / 2 - cardW / 2;
-          const cy = wy - cardH - 12 * zoom;
-
-          ctx.save();
-          ctx.shadowBlur = 12 * zoom;
-          ctx.shadowColor = 'rgba(0,0,0,0.3)';
-          ctx.fillStyle = '#fef08a'; // Pastel yellow
-          roundRect(ctx, cx, cy, cardW, cardH, 8 * zoom);
-          ctx.fill();
-          ctx.strokeStyle = '#fbbf24';
-          ctx.lineWidth = 1.5 * zoom;
-          ctx.stroke();
-
-          ctx.beginPath();
-          ctx.moveTo(wx + ww / 2 - 6 * zoom, wy - 12 * zoom);
-          ctx.lineTo(wx + ww / 2, wy - 4 * zoom);
-          ctx.lineTo(wx + ww / 2 + 6 * zoom, wy - 12 * zoom);
-          ctx.fillStyle = '#fef08a';
-          ctx.fill();
-          ctx.strokeStyle = '#fbbf24';
-          ctx.lineWidth = 1.5 * zoom;
-          ctx.stroke();
-          ctx.restore();
-
-          ctx.save();
-          ctx.fillStyle = '#713f12'; // Bronze text
-          ctx.textAlign = 'left';
-          ctx.textBaseline = 'top';
-          ctx.font = `bold ${Math.max(9, 11 * zoom)}px Inter`;
-          ctx.fillText('💬 Reviewer Comment:', cx + padding, cy + padding);
-
-          ctx.font = `500 ${Math.max(8, 10 * zoom)}px Inter`;
-          ctx.fillText(wc.adminComment, cx + padding, cy + padding + 16 * zoom, cardW - padding * 2);
-          ctx.restore();
-        }
+             ctx.save();
+             ctx.fillStyle = '#713f12'; // Bronze text
+             ctx.textAlign = 'left';
+             ctx.textBaseline = 'top';
+             ctx.font = `bold ${Math.max(9, 11 * zoom)}px Inter`;
+             ctx.fillText('💬 Reviewer Comment:', cx + padding, cy + padding);
+             
+             ctx.font = `500 ${Math.max(8, 10 * zoom)}px Inter`;
+             ctx.fillText(wc.adminComment, cx + padding, cy + padding + 16 * zoom, cardW - padding * 2);
+             ctx.restore();
+          }
+        });
       });
-    });
 
 
 
@@ -1000,7 +851,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
 
       const isInternal = from.area.id === to.area.id;
       const flowColor = flow.id === selectedFlowId ? '#38bdf8' : (isInternal ? '#fbbf24' : '#ef4444');
-
+      
       const flowPoints = getFlowPoints(flow, from, to, fIdx);
       const path = flowPoints.map((pt: [number, number]) => ({ x: pt[0] * zoom + panX, y: pt[1] * zoom + panY }));
 
@@ -1017,16 +868,16 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
 
         // Render Mid-Segment "Move" Handles
         for (let i = 0; i < path.length - 1; i++) {
-          const p1 = path[i]; const p2 = path[i + 1];
+          const p1 = path[i]; const p2 = path[i+1];
           const mx = (p1.x + p2.x) / 2; const my = (p1.y + p2.y) / 2;
-
+          
           ctx.save();
           ctx.fillStyle = '#38bdf8';
           ctx.beginPath(); ctx.arc(mx, my, 4 * zoom, 0, Math.PI * 2); ctx.fill();
           // Draw a small drag icon hint
           ctx.strokeStyle = '#fff'; ctx.lineWidth = 1 * zoom;
-          ctx.beginPath(); ctx.moveTo(mx - 3 * zoom, my); ctx.lineTo(mx + 3 * zoom, my); ctx.stroke();
-          ctx.beginPath(); ctx.moveTo(mx, my - 3 * zoom); ctx.lineTo(mx, my + 3 * zoom); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(mx - 3*zoom, my); ctx.lineTo(mx + 3*zoom, my); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(mx, my - 3*zoom); ctx.lineTo(mx, my + 3*zoom); ctx.stroke();
           ctx.restore();
         }
       }
@@ -1047,12 +898,6 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
   useEffect(() => { syncLocalInputs(); }, [selectedWcId, selectedAreaId]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (isSpacePressed || e.button === 1) {
-      dragRef.current = { type: 'pan', id: '', startX: e.clientX, startY: e.clientY, itemStartX: viewState.panX, itemStartY: viewState.panY };
-      setIsPanning(true);
-      return;
-    }
-
     if (isAdmin || readOnly || isPublicView) {
       const rect = canvasRef.current?.getBoundingClientRect(); if (!rect) return;
       const { zoom, panX, panY } = viewState;
@@ -1063,11 +908,9 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       for (const area of factory.areas) {
         for (const line of area.lines || []) {
           for (const wc of line.workCenters || []) {
-            const { width: visualW, height: visualH } = getWcVisualSize(wc);
-            if (worldX >= wc.x && worldX <= wc.x + visualW && worldY >= wc.y && worldY <= wc.y + visualH) {
+            if (worldX >= wc.x && worldX <= wc.x + wc.width && worldY >= wc.y && worldY <= wc.y + wc.height) {
               setSelectedWcId(wc.id); setSelectedAreaId(area.id); setSelectedFlowId(null);
               dragRef.current = { type: 'pan', id: '', startX: e.clientX, startY: e.clientY, itemStartX: viewState.panX, itemStartY: viewState.panY };
-              setIsPanning(true);
               return;
             }
           }
@@ -1079,13 +922,11 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
         if (worldX >= area.x && worldX <= area.x + area.width && worldY >= area.y && worldY <= area.y + area.height) {
           setSelectedAreaId(area.id); setSelectedWcId(null); setSelectedFlowId(null);
           dragRef.current = { type: 'pan', id: '', startX: e.clientX, startY: e.clientY, itemStartX: viewState.panX, itemStartY: viewState.panY };
-          setIsPanning(true);
           return;
         }
       }
 
       dragRef.current = { type: 'pan', id: '', startX: e.clientX, startY: e.clientY, itemStartX: viewState.panX, itemStartY: viewState.panY };
-      setIsPanning(true);
       setSelectedWcId(null); setSelectedAreaId(null); setSelectedFlowId(null);
       return;
     }
@@ -1093,7 +934,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     const { zoom, panX, panY } = viewState;
     const worldX = (e.clientX - rect.left - panX) / zoom;
     const worldY = (e.clientY - rect.top - panY) / zoom;
-
+    
     const initialState = JSON.parse(JSON.stringify(factory));
 
     // 1. Check Handles (If a flow is already selected)
@@ -1103,18 +944,18 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
         // Waypoints
         for (let i = 0; i < flow.routingPoints.length; i++) {
           const pt = flow.routingPoints[i];
-          if (Math.sqrt((worldX - pt[0]) ** 2 + (worldY - pt[1]) ** 2) < 12) {
+          if (Math.sqrt((worldX - pt[0])**2 + (worldY - pt[1])**2) < 12) {
             dragRef.current = { type: 'waypoint', id: flow.id, flowId: flow.id, wpIndex: i, startX: e.clientX, startY: e.clientY, itemStartX: pt[0], itemStartY: pt[1], initialState };
             return;
           }
         }
         // Segments
         for (let i = 0; i < flow.routingPoints.length - 1; i++) {
-          const p1 = flow.routingPoints[i]; const p2 = flow.routingPoints[i + 1];
+          const p1 = flow.routingPoints[i]; const p2 = flow.routingPoints[i+1];
           const mx = (p1[0] + p2[0]) / 2; const my = (p1[1] + p2[1]) / 2;
-          if (Math.sqrt((worldX - mx) ** 2 + (worldY - my) ** 2) < 12) {
-            dragRef.current = { type: 'segment', id: flow.id, flowId: flow.id, segIndex: i, startX: e.clientX, startY: e.clientY, itemStartX: p1[0], itemStartY: p1[1], initialState };
-            return;
+          if (Math.sqrt((worldX - mx)**2 + (worldY - my)**2) < 12) {
+             dragRef.current = { type: 'segment', id: flow.id, flowId: flow.id, segIndex: i, startX: e.clientX, startY: e.clientY, itemStartX: p1[0], itemStartY: p1[1], initialState };
+             return;
           }
         }
       }
@@ -1124,8 +965,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     for (const area of factory.areas) {
       for (const line of area.lines || []) {
         for (const wc of line.workCenters || []) {
-          const { width: visualW, height: visualH } = getWcVisualSize(wc);
-          if (worldX >= wc.x && worldX <= wc.x + visualW && worldY >= wc.y && worldY <= wc.y + visualH) {
+          if (worldX >= wc.x && worldX <= wc.x + wc.width && worldY >= wc.y && worldY <= wc.y + wc.height) {
             dragRef.current = { type: 'wc', id: wc.id, areaId: area.id, startX: e.clientX, startY: e.clientY, itemStartX: wc.x, itemStartY: wc.y, initialState } as any;
             setSelectedWcId(wc.id); setSelectedAreaId(area.id); setSelectedFlowId(null); return;
           }
@@ -1135,46 +975,45 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
 
     // 3. Check Flow Lines & Arrowheads (Selection)
     for (const flow of (factory.flows || [])) {
-      const from = allWcs[flow.fromWsId]; const to = allWcs[flow.toWsId];
-      if (!from || !to) continue;
+       const from = allWcs[flow.fromWsId]; const to = allWcs[flow.toWsId];
+       if (!from || !to) continue;
 
-      const flowIndex = factory.flows.indexOf(flow);
-      const path = getFlowPoints(flow, from, to, flowIndex);
+       const flowIndex = factory.flows.indexOf(flow);
+       const path = getFlowPoints(flow, from, to, flowIndex);
 
-      // --- Arrowhead Hit Detection ---
-      const last = path[path.length - 1];
-      if (last) {
-        if (Math.sqrt((worldX - last[0]) ** 2 + (worldY - last[1]) ** 2) < 25) {
-          setSelectedFlowId(flow.id); setSelectedWcId(null); return;
-        }
-      }
-
-      // --- Segment Hit Detection ---
-      for (let i = 0; i < path.length - 1; i++) {
-        const p1 = path[i]; const p2 = path[i + 1];
-        const l2 = (p2[0] - p1[0]) ** 2 + (p2[1] - p1[1]) ** 2;
-        if (l2 === 0) continue;
-        const t = Math.max(0, Math.min(1, ((worldX - p1[0]) * (p2[0] - p1[0]) + (worldY - p1[1]) * (p2[1] - p1[1])) / l2));
-        const dist = Math.sqrt((worldX - (p1[0] + t * (p2[0] - p1[0]))) ** 2 + (worldY - (p1[1] + t * (p2[1] - p1[1]))) ** 2);
-
-        if (dist < 15) {
-          setSelectedFlowId(flow.id);
-          setSelectedWcId(null);
-          if (!flow.routingPoints) {
-            setFactory((prev: any) => ({
-              ...prev,
-              flows: prev.flows.map((f: any) => f.id === flow.id ? { ...f, routingPoints: path } : f)
-            }));
+       // --- Arrowhead Hit Detection ---
+       const last = path[path.length - 1]; 
+       if (last) {
+          if (Math.sqrt((worldX - last[0])**2 + (worldY - last[1])**2) < 25) {
+             setSelectedFlowId(flow.id); setSelectedWcId(null); return;
           }
-          return;
-        }
-      }
+       }
+
+       // --- Segment Hit Detection ---
+       for (let i = 0; i < path.length - 1; i++) {
+         const p1 = path[i]; const p2 = path[i+1];
+         const l2 = (p2[0]-p1[0])**2 + (p2[1]-p1[1])**2;
+         if (l2 === 0) continue;
+         const t = Math.max(0, Math.min(1, ((worldX-p1[0])*(p2[0]-p1[0]) + (worldY-p1[1])*(p2[1]-p1[1])) / l2));
+         const dist = Math.sqrt((worldX - (p1[0] + t*(p2[0]-p1[0])))**2 + (worldY - (p1[1] + t*(p2[1]-p1[1])))**2);
+         
+         if (dist < 15) {
+           setSelectedFlowId(flow.id);
+           setSelectedWcId(null);
+           if (!flow.routingPoints) {
+              setFactory((prev: any) => ({
+                 ...prev,
+                 flows: prev.flows.map((f: any) => f.id === flow.id ? { ...f, routingPoints: path } : f)
+              }));
+           }
+           return;
+         }
+       }
     }
 
     dragRef.current = { type: 'pan', id: '', startX: e.clientX, startY: e.clientY, itemStartX: viewState.panX, itemStartY: viewState.panY } as any;
-    setIsPanning(true);
     setSelectedWcId(null); setSelectedFlowId(null);
-  }, [factory, allWcs, viewState, getFlowPoints, isAdmin, readOnly, isPublicView, selectedFlowId, isSpacePressed]);
+  }, [factory, allWcs, viewState, getFlowPoints, isAdmin, readOnly, isPublicView, selectedFlowId]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!canvasRef.current || !factory) return;
@@ -1188,11 +1027,10 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     for (const area of factory.areas) {
       for (const line of area.lines) {
         for (const wc of line.workCenters) {
-          const { width: visualW, height: visualH } = getWcVisualSize(wc);
           const wx = wc.x * zoom + panX;
           const wy = wc.y * zoom + panY;
-          const ww = visualW * zoom;
-          const wh = visualH * zoom;
+          const ww = wc.width * zoom;
+          const wh = wc.height * zoom;
           if (mx >= wx && mx <= wx + ww && my >= wy && my <= wy + wh) {
             foundHover = wc.id;
             break;
@@ -1202,7 +1040,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       }
       if (foundHover) break;
     }
-
+    
     if (foundHover !== hoveredWcId) {
       setHoveredWcId(foundHover);
     }
@@ -1226,93 +1064,90 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       if (wc && area) {
         const targetX = itemStartX + dx; const targetY = itemStartY + dy;
         // Allow free dragging within area bounds (ignore strict collision padding)
-        const { width: visualW, height: visualH } = getWcVisualSize(wc);
-        wc.x = Math.max(area.x, Math.min(area.x + area.width - visualW, targetX));
-        wc.y = Math.max(area.y, Math.min(area.y + area.height - visualH, targetY));
+        wc.x = Math.max(area.x, Math.min(area.x + area.width - wc.width, targetX)); 
+        wc.y = Math.max(area.y, Math.min(area.y + area.height - wc.height, targetY)); 
 
         // STICKY CONNECTIONS
-        newFactory.flows = (newFactory.flows || []).map((f: any) => {
-          if ((f.fromWsId === id || f.toWsId === id) && f.routingPoints) {
-            const newPts = [...f.routingPoints.map((p: any) => [...p])];
-            const from = f.fromWsId === id ? wc : allWcs[f.fromWsId];
-            const to = f.toWsId === id ? wc : allWcs[f.toWsId];
-            const fromSize = getWcVisualSize(from);
-            const toSize = getWcVisualSize(to);
-            const fdx = to.x - from.x; const fdy = to.y - from.y;
-            if (f.fromWsId === id) {
-              newPts[0] = [
-                (Math.abs(fdx) > Math.abs(fdy) ? (fdx > 0 ? (from.x + fromSize.width) : from.x) : (from.x + fromSize.width / 2)),
-                (Math.abs(fdy) >= Math.abs(fdx) ? (fdy > 0 ? (from.y + fromSize.height) : from.y) : (from.y + fromSize.height / 2))
-              ];
-            }
-            if (f.toWsId === id) {
-              newPts[newPts.length - 1] = [
-                (Math.abs(fdx) > Math.abs(fdy) ? (fdx > 0 ? to.x : (to.x + toSize.width)) : (to.x + toSize.width / 2)),
-                (Math.abs(fdy) >= Math.abs(fdx) ? (fdy > 0 ? to.y : (to.y + toSize.height)) : (to.y + toSize.height / 2))
-              ];
-            }
-            return { ...f, routingPoints: newPts };
-          }
-          return f;
-        });
-        updateFactory(newFactory, false);
-      }
+           newFactory.flows = (newFactory.flows || []).map((f: any) => {
+              if ((f.fromWsId === id || f.toWsId === id) && f.routingPoints) {
+                 const newPts = [...f.routingPoints.map((p: any) => [...p])];
+                 const from = f.fromWsId === id ? wc : allWcs[f.fromWsId];
+                 const to = f.toWsId === id ? wc : allWcs[f.toWsId];
+                 const fdx = to.x - from.x; const fdy = to.y - from.y;
+                 if (f.fromWsId === id) {
+                    newPts[0] = [
+                       (Math.abs(fdx) > Math.abs(fdy) ? (fdx > 0 ? (from.x + from.width) : from.x) : (from.x + from.width / 2)),
+                       (Math.abs(fdy) >= Math.abs(fdx) ? (fdy > 0 ? (from.y + from.height) : from.y) : (from.y + from.height / 2))
+                    ];
+                 }
+                 if (f.toWsId === id) {
+                    newPts[newPts.length - 1] = [
+                       (Math.abs(fdx) > Math.abs(fdy) ? (fdx > 0 ? to.x : (to.x + to.width)) : (to.x + to.width / 2)),
+                       (Math.abs(fdy) >= Math.abs(fdx) ? (fdy > 0 ? to.y : (to.y + to.height)) : (to.y + to.height / 2))
+                    ];
+                 }
+                 return { ...f, routingPoints: newPts };
+              }
+              return f;
+           });
+           updateFactory(newFactory, false); 
+        }
     } else if (type === 'waypoint' && !isAdmin && !readOnly && !isPublicView) {
-      const flowId = (dragRef.current as any).flowId;
-      const wpIndex = (dragRef.current as any).wpIndex;
-      if (flowId !== undefined && wpIndex !== undefined) {
-        const newFactory = { ...factory };
-        const flow = newFactory.flows.find((f: any) => f.id === flowId);
-        if (flow && flow.routingPoints) {
-          const newPts = [...flow.routingPoints.map((p: any) => [...p])];
-          const nx = Math.round((itemStartX + dx) / 20) * 20;
-          const ny = Math.round((itemStartY + dy) / 20) * 20;
-          if (wpIndex > 0 && wpIndex < flow.routingPoints.length - 1) {
-            newPts[wpIndex] = [nx, ny];
-            const prev = newPts[wpIndex - 1];
-            if (Math.abs(nx - prev[0]) < Math.abs(ny - prev[1])) newPts[wpIndex][0] = prev[0];
-            else newPts[wpIndex][1] = prev[1];
+       const flowId = (dragRef.current as any).flowId;
+       const wpIndex = (dragRef.current as any).wpIndex;
+       if (flowId !== undefined && wpIndex !== undefined) {
+         const newFactory = { ...factory };
+         const flow = newFactory.flows.find((f: any) => f.id === flowId);
+         if (flow && flow.routingPoints) {
+            const newPts = [...flow.routingPoints.map((p: any) => [...p])];
+            const nx = Math.round((itemStartX + dx) / 20) * 20;
+            const ny = Math.round((itemStartY + dy) / 20) * 20;
+            if (wpIndex > 0 && wpIndex < flow.routingPoints.length - 1) {
+               newPts[wpIndex] = [nx, ny];
+               const prev = newPts[wpIndex-1];
+               if (Math.abs(nx - prev[0]) < Math.abs(ny - prev[1])) newPts[wpIndex][0] = prev[0];
+               else newPts[wpIndex][1] = prev[1];
+               flow.routingPoints = newPts;
+               updateFactory(newFactory, false);
+            }
+         }
+       }
+    } else if (type === 'segment' && !isAdmin && !readOnly && !isPublicView) {
+       const flowId = (dragRef.current as any).flowId;
+       const si = (dragRef.current as any).segIndex;
+       if (flowId !== undefined && si !== undefined) {
+         const newFactory = { ...factory };
+         const flow = newFactory.flows.find((f: any) => f.id === flowId);
+         if (flow && flow.routingPoints) {
+            let newPts = [...flow.routingPoints.map((p: any) => [...p])];
+            if (newPts.length === 2) {
+               const p0 = newPts[0]; const p1 = newPts[1];
+               newPts = [p0, [...p0], [...p1], p1];
+               (dragRef.current as any).segIndex = 1;
+               (dragRef.current as any).itemStartX = p0[0];
+               (dragRef.current as any).itemStartY = p0[1];
+            }
+            const psi = (dragRef.current as any).segIndex;
+            const p1 = newPts[psi]; const p2 = newPts[psi+1];
+            const isVertical = Math.abs(p1[0] - p2[0]) < 1;
+            if (isVertical) {
+               const nx = Math.round(((dragRef.current as any).itemStartX + dx) / 20) * 20;
+               if (psi > 0) newPts[psi][0] = nx;
+               if (psi + 1 < newPts.length - 1) newPts[psi+1][0] = nx;
+            } else {
+               const ny = Math.round(((dragRef.current as any).itemStartY + dy) / 20) * 20;
+               if (psi > 0) newPts[psi][1] = ny;
+               if (psi + 1 < newPts.length - 1) newPts[psi+1][1] = ny;
+            }
             flow.routingPoints = newPts;
             updateFactory(newFactory, false);
-          }
-        }
-      }
-    } else if (type === 'segment' && !isAdmin && !readOnly && !isPublicView) {
-      const flowId = (dragRef.current as any).flowId;
-      const si = (dragRef.current as any).segIndex;
-      if (flowId !== undefined && si !== undefined) {
-        const newFactory = { ...factory };
-        const flow = newFactory.flows.find((f: any) => f.id === flowId);
-        if (flow && flow.routingPoints) {
-          let newPts = [...flow.routingPoints.map((p: any) => [...p])];
-          if (newPts.length === 2) {
-            const p0 = newPts[0]; const p1 = newPts[1];
-            newPts = [p0, [...p0], [...p1], p1];
-            (dragRef.current as any).segIndex = 1;
-            (dragRef.current as any).itemStartX = p0[0];
-            (dragRef.current as any).itemStartY = p0[1];
-          }
-          const psi = (dragRef.current as any).segIndex;
-          const p1 = newPts[psi]; const p2 = newPts[psi + 1];
-          const isVertical = Math.abs(p1[0] - p2[0]) < 1;
-          if (isVertical) {
-            const nx = Math.round(((dragRef.current as any).itemStartX + dx) / 20) * 20;
-            if (psi > 0) newPts[psi][0] = nx;
-            if (psi + 1 < newPts.length - 1) newPts[psi + 1][0] = nx;
-          } else {
-            const ny = Math.round(((dragRef.current as any).itemStartY + dy) / 20) * 20;
-            if (psi > 0) newPts[psi][1] = ny;
-            if (psi + 1 < newPts.length - 1) newPts[psi + 1][1] = ny;
-          }
-          flow.routingPoints = newPts;
-          updateFactory(newFactory, false);
-        }
-      }
+         }
+       }
     }
   }, [factory, viewState, hoveredWcId, allWcs, isAdmin, readOnly, isPublicView, updateFactory]);
 
-  const handleMouseUp = useCallback((e: React.MouseEvent) => {
-    if (dragRef.current && (dragRef.current as any).type !== 'pan') {
+  const handleMouseUp = useCallback((e: React.MouseEvent) => { 
+    if (dragRef.current && (dragRef.current as any).type !== 'pan') { 
       const stateToRecord = (dragRef.current as any).initialState;
       const startX = dragRef.current.startX;
       const startY = dragRef.current.startY;
@@ -1322,10 +1157,9 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
         setHistory(prev => [...prev.slice(-49), stateToRecord]);
         setRedoStack([]);
       }
-      syncLocalInputs();
-    }
-    dragRef.current = null;
-    setIsPanning(false);
+      syncLocalInputs(); 
+    } 
+    dragRef.current = null; 
   }, [syncLocalInputs]);
 
 
@@ -1339,9 +1173,9 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     const newFactory = JSON.parse(JSON.stringify(factory));
     const area = newFactory.areas.find((a: any) => a.id === areaId);
     if (!area) return;
-
+    
     const wsId = Math.random().toString(36).substr(2, 9);
-
+    
     // Initialize parameters with all headers to ensure consistent CSV structure
     const parameters: any = { lastUpdated: new Date() };
     if (factory.csvHeaders) {
@@ -1360,7 +1194,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       status: 'Running',
       parameters: parameters
     };
-
+    
     area.lines[0].workCenters.push(newWc);
     updateFactory(newFactory);
     setSelectedWcId(wsId);
@@ -1420,7 +1254,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     }
     try {
       const endpoint = action === 'push' ? 'comment' : action;
-
+      
       const workstations: any[] = [];
       const areas: any[] = [];
       if (factory && factory.areas) {
@@ -1442,12 +1276,12 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       // Local drafts use UUIDs (with dashes), SQL Backend uses Integers
       const isLocal = layoutId.toString().includes('-');
       const baseUrl = isLocal ? '/api' : 'http://localhost:4000/api';
-
+      
       const res = await fetch(`${baseUrl}/layouts/${layoutId}/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          admin_comments: adminComment,
+        body: JSON.stringify({ 
+          admin_comments: adminComment, 
           adminComments: adminComment, // Compatibility with local store
           status: (action === 'push' || action === 'reject') ? 'rejected' : 'approved',
           reviewedBy: 'Admin',
@@ -1462,7 +1296,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
         if (action === 'push') msg = "Layout rejected and sent back to developer with feedback!";
         else if (action === 'approve') msg = "Layout officially approved!";
         else if (action === 'reject') msg = "Layout rejected.";
-
+        
         alert(msg);
         window.location.href = '/admin';
       } else {
@@ -1473,39 +1307,13 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     }
   };
 
-  const getCursorStyle = () => {
-    const isDraggingSomething = isPanning || (dragRef.current !== null);
-    if (isDraggingSomething) return 'grabbing';
-    if (hoveredWcId) return 'grab';
-    return 'grab';
-  };
-
   if (isAdmin || readOnly || isPublicView) {
     return (
       <div className="flex flex-1 flex-col relative bg-[#060b14] overflow-hidden w-full h-full font-sans">
         <div ref={containerRef} className="flex-1 overflow-hidden z-10 flex items-center justify-center">
-          <canvas
-            ref={canvasRef}
-            className="block w-full h-full"
-            style={{ cursor: getCursorStyle() }}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-          />
+          <canvas ref={canvasRef} className="block cursor-grab active:cursor-grabbing w-full h-full" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={e => setViewState(p => ({ ...p, targetZoom: Math.max(0.35, Math.min(3, p.targetZoom * (e.deltaY > 0 ? 0.9 : 1.1))) }))} />
         </div>
-
-        {/* Responsive Control Toggle (only under xl viewports) */}
-        <div className="xl:hidden absolute top-28 left-6 z-30">
-          <Button
-            onClick={() => setShowAdminPanels(!showAdminPanels)}
-            className="bg-[#1e293b] hover:bg-[#334155] text-white border border-[#334155] rounded-xl h-11 px-4 font-bold shadow-xl flex items-center gap-2"
-          >
-            <Grid3x3 className="h-4 w-4" />
-            {showAdminPanels ? 'Hide Controls' : 'Show Display Options'}
-          </Button>
-        </div>
-
-        <div className={`absolute top-[440px] xl:top-[380px] left-6 xl:left-8 z-20 w-[240px] flex flex-col gap-5 bg-[#0f172a]/95 backdrop-blur-md border border-[#1e293b] rounded-2xl shadow-2xl p-6 transition-all duration-300 ${showAdminPanels ? 'translate-x-0 opacity-100' : 'max-xl:-translate-x-[350px] max-xl:opacity-0 xl:translate-x-0'}`}>
+        <div className="absolute top-[380px] left-8 z-20 w-[240px] flex flex-col gap-5 bg-[#0f172a]/95 backdrop-blur-md border border-[#1e293b] rounded-2xl shadow-2xl p-6">
           <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b border-slate-800 pb-3 mb-1">Architectural Legend</h3>
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-4 text-slate-300 text-[10px] font-black uppercase tracking-widest group cursor-default"><div className="w-8 h-4 border-2 border-[#10b981] rounded-sm group-hover:scale-110 transition-transform"></div><span>Workstation</span></div>
@@ -1514,41 +1322,26 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
             <div className="flex items-center gap-4 text-slate-300 text-[10px] font-black uppercase tracking-widest group cursor-default"><div className="w-8 h-4 border-2 border-dashed border-slate-700 rounded-sm group-hover:scale-110 transition-transform"></div><span>Area Bound</span></div>
           </div>
         </div>
-
-        <div className={`absolute top-[170px] xl:top-[110px] left-6 xl:left-8 z-20 w-[280px] bg-[#0f172a]/95 backdrop-blur-md border border-[#1e293b] rounded-2xl shadow-2xl p-6 transition-all duration-300 ${showAdminPanels ? 'translate-x-0 opacity-100' : 'max-xl:-translate-x-[350px] max-xl:opacity-0 xl:translate-x-0'}`}>
+        <div className="absolute top-[110px] left-8 z-20 w-[280px] bg-[#0f172a]/95 backdrop-blur-md border border-[#1e293b] rounded-2xl shadow-2xl p-6">
           <h3 className="text-[11px] font-bold text-slate-300 uppercase tracking-widest mb-5 flex items-center gap-2"><LayoutGrid className="h-4 w-4 text-indigo-400" /> Display Parameters</h3>
           <div className="space-y-4">{allFilters.map(f => (<label key={f.id} className="flex items-start gap-4 p-2 hover:bg-[#1e293b]/50 rounded-xl cursor-pointer transition-colors group"><input type="checkbox" checked={activeFilterIds[f.id]} onChange={() => setActiveFilterIds(p => ({ ...p, [f.id]: !p[f.id] }))} className="mt-0.5 h-4.5 w-4.5 accent-indigo-500 rounded border-slate-700 bg-slate-900" /><div className="flex flex-col gap-0.5"><span className="text-[12px] font-bold text-slate-200 group-hover:text-white">{f.label}</span><span className="text-[10px] text-slate-500">{f.description}</span></div></label>))}</div>
         </div>
-
-        <div className="absolute top-0 left-0 right-0 z-20 flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 sm:p-8 bg-[#060b14]/90 sm:bg-gradient-to-b sm:from-[#060b14] sm:via-[#060b14]/90 sm:to-transparent border-b border-slate-800/20 md:border-b-0">
-          <div className="flex flex-wrap items-center gap-4 sm:gap-8">
-            <Button onClick={() => window.location.href = isPublicView ? '/' : '/admin'} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155] transition-all active:scale-95 flex-shrink-0"><ArrowLeft className="mr-3 h-5 w-5" /> {isPublicView ? 'Exit View' : 'Back'}</Button>
-            <div className="hidden sm:block h-10 w-px bg-slate-800"></div>
-            <div>
-              <h2 className="text-white font-bold text-lg sm:text-2xl tracking-tight mb-1">{factory?.name || 'Blueprint Reviewer'} <span className="text-slate-500 font-medium ml-2 text-xs sm:text-sm">ID-{layoutId}</span></h2>
-              <p className="text-indigo-400 text-[9px] sm:text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-2"><CheckCircle2 className="h-3 w-3" /> {isPublicView ? 'Public Shared View' : 'Review Mode (View Only)'}</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2 sm:gap-3 w-full md:w-auto">
-            <Button
-              onClick={() => window.open('/admin/help', '_blank')}
-              className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-4 sm:px-6 font-bold shadow-xl hover:bg-[#334155] text-xs sm:text-sm flex-1 sm:flex-none flex items-center gap-2"
-            >
-              <HelpCircle className="h-4 w-4 text-indigo-400" /> Guide
-            </Button>
-            <Button
-              onClick={() => setShowComments(!showComments)}
-              className={`border rounded-xl h-12 px-4 sm:px-6 font-bold shadow-xl transition-all flex items-center gap-2 text-xs sm:text-sm flex-1 sm:flex-none ${showComments ? 'bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-700 font-extrabold' : 'bg-[#1e293b] text-white border-[#334155] hover:bg-[#334155]'}`}
+        <div className="absolute top-0 left-0 right-0 z-20 flex justify-between p-8 bg-gradient-to-b from-[#060b14] via-[#060b14]/80 to-transparent">
+          <div className="flex items-center gap-8"><Button onClick={() => window.location.href = isPublicView ? '/' : '/admin'} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155] transition-all active:scale-95"><ArrowLeft className="mr-3 h-5 w-5" /> {isPublicView ? 'Exit View' : 'Back to Console'}</Button><div className="h-10 w-px bg-slate-800"></div><div><h2 className="text-white font-bold text-2xl tracking-tight mb-1">{factory?.name || 'Blueprint Reviewer'} <span className="text-slate-500 font-medium ml-2">ID-{layoutId}</span></h2><p className="text-indigo-400 text-[11px] font-black uppercase tracking-[0.2em] flex items-center gap-2"><CheckCircle2 className="h-3 w-3" /> {isPublicView ? 'Public Shared View' : 'Mandatory Review Mode (View Only)'}</p></div></div>
+          <div className="flex gap-4">
+            <Button 
+              onClick={() => setShowComments(!showComments)} 
+              className={`border rounded-xl h-12 px-6 font-bold shadow-xl transition-all flex items-center gap-2 ${showComments ? 'bg-indigo-600 text-white border-indigo-500 hover:bg-indigo-700 font-extrabold' : 'bg-[#1e293b] text-white border-[#334155] hover:bg-[#334155]'}`}
             >
               <MessageSquare className="h-4 w-4" />
-              {showComments ? 'Hide Comments' : 'Comments'}
+              {showComments ? 'Hide Comments' : 'Show Comments'}
             </Button>
-            <Button onClick={handleFitToScreen} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-4 sm:px-6 font-bold shadow-xl hover:bg-[#334155] transition-all active:scale-95 text-xs sm:text-sm flex-1 sm:flex-none"><Maximize2 className="mr-2 h-4 w-4" /> Center</Button>
-            <Button onClick={() => navigator.clipboard.writeText(getShareUrl()).then(() => setShareMsg(true))} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-4 sm:px-6 font-bold shadow-xl hover:bg-[#334155] text-xs sm:text-sm flex-1 sm:flex-none">{shareMsg ? 'Copied ✓' : 'Share'}</Button>
+            <Button onClick={handleFitToScreen} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155] transition-all active:scale-95"><Maximize2 className="mr-2 h-4 w-4" /> Re-Center</Button>
+            <Button onClick={() => navigator.clipboard.writeText(getShareUrl()).then(() => setShareMsg(true))} className="bg-[#1e293b] text-white border border-[#334155] rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-[#334155]">{shareMsg ? 'Link Copied ✓' : 'Share URL'}</Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button className="bg-indigo-600 text-white rounded-xl h-12 px-4 sm:px-6 font-bold shadow-xl hover:bg-indigo-700 transition-all flex items-center gap-2 text-xs sm:text-sm flex-1 sm:flex-none">
-                  <Download className="h-4 w-4" /> Download
+                <Button className="bg-indigo-600 text-white rounded-xl h-12 px-6 font-bold shadow-xl hover:bg-indigo-700 transition-all flex items-center gap-2">
+                  <Download className="h-4 w-4" /> Download Blueprint
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="bg-[#0f172a] border-[#1e293b] text-white p-2 rounded-xl shadow-2xl">
@@ -1562,9 +1355,8 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
             </DropdownMenu>
           </div>
         </div>
-
         {!isPublicView && isAdmin && (
-          <div className="absolute bottom-4 sm:bottom-10 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] md:w-full md:max-w-5xl z-20 flex flex-col gap-4 sm:gap-5 bg-[#0f172a]/98 backdrop-blur-xl border border-[#1e293b] p-5 sm:p-8 rounded-3xl shadow-2xl ring-1 ring-white/5 animate-in slide-in-from-bottom-5">
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-full max-w-5xl z-20 flex flex-col gap-5 bg-[#0f172a]/98 backdrop-blur-xl border border-[#1e293b] p-8 rounded-3xl shadow-2xl ring-1 ring-white/5 animate-in slide-in-from-bottom-5">
             <div className="flex justify-between items-center px-1">
               <h3 className="text-white text-xs font-black uppercase tracking-widest flex items-center gap-2"><MessageSquare className="h-4 w-4 text-indigo-400" /> Reviewer Feedback</h3>
               <div className="flex gap-2 items-center text-[10px] text-slate-500 font-bold uppercase tracking-widest">
@@ -1573,10 +1365,10 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
             </div>
 
             {(selectedWc || selectedArea) && (
-              <div className="flex flex-col gap-3 p-4 sm:p-5 bg-[#0b1120] border border-[#1e293b] rounded-2xl animate-in fade-in">
+              <div className="flex flex-col gap-3 p-5 bg-[#0b1120] border border-[#1e293b] rounded-2xl animate-in fade-in">
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-indigo-400 font-extrabold tracking-wider uppercase flex items-center gap-2">
-                    <Activity className="h-4 w-4" /> {selectedWc ? `Workstation ${selectedWc.name || selectedWc.workCenterId}` : `Area ${selectedArea?.areaName}`}
+                    <Activity className="h-4 w-4" /> Element Comment: {selectedWc ? `Workstation ${selectedWc.name || selectedWc.workCenterId}` : `Area ${selectedArea?.areaName}`}
                   </span>
                   <button onClick={() => { setSelectedWcId(null); setSelectedAreaId(null); }} className="text-slate-400 hover:text-white transition-colors text-xs font-bold flex items-center gap-1">
                     Clear Selection <X className="h-3 w-3" />
@@ -1601,18 +1393,16 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
                     });
                   }}
                   className="bg-[#0f172a] border border-[#1e293b] rounded-xl px-5 py-3 text-xs text-slate-200 outline-none focus:border-indigo-500 transition-all placeholder:text-slate-600"
-                  placeholder={`Add comments specific to this element here...`}
+                  placeholder={`Add review comments specific to this ${selectedWc ? 'workstation' : 'area'} here...`}
                 />
               </div>
             )}
 
-            <div className="flex flex-col md:flex-row gap-3 md:gap-4 items-stretch md:items-center w-full">
-              <input type="text" value={adminComment} onChange={e => setAdminComment(e.target.value)} className="flex-1 bg-[#0b1120] border border-[#1e293b] rounded-2xl px-6 py-4 text-sm text-slate-200 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-slate-600" placeholder="Type your detailed architectural feedback here..." />
-              <div className="flex flex-wrap gap-2 md:gap-3 justify-end">
-                <Button onClick={() => handleReviewAction('push')} className="bg-[#3f83f8] hover:bg-[#2563eb] text-white px-5 sm:px-6 h-12 rounded-xl font-black uppercase text-[10px] sm:text-xs tracking-wider shadow-lg shadow-blue-500/20 transition-all active:scale-95 flex items-center justify-center gap-2"><Send className="h-4 w-4" /> Push to Dev</Button>
-                <Button onClick={() => handleReviewAction('approve')} className="bg-[#10b981] hover:bg-[#059669] text-white px-5 sm:px-6 h-12 rounded-xl font-black uppercase text-[10px] sm:text-xs tracking-wider shadow-lg shadow-emerald-500/20 transition-all active:scale-95">Approve</Button>
-                <Button onClick={() => handleReviewAction('reject')} className="bg-[#ef4444] hover:bg-[#dc2626] text-white px-5 sm:px-6 h-12 rounded-xl font-black uppercase text-[10px] sm:text-xs tracking-wider shadow-lg shadow-rose-500/20 transition-all active:scale-95">Reject</Button>
-              </div>
+            <div className="flex gap-4 items-center">
+              <input type="text" value={adminComment} onChange={e => setAdminComment(e.target.value)} className="flex-1 bg-[#0b1120] border border-[#1e293b] rounded-2xl px-6 py-5 text-sm text-slate-200 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all placeholder:text-slate-600" placeholder="Type your detailed architectural feedback here..." />
+              <Button onClick={() => handleReviewAction('push')} className="bg-[#3f83f8] hover:bg-[#2563eb] text-white px-8 h-16 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-blue-500/20 transition-all active:scale-95 flex items-center gap-2"><Send className="h-4 w-4" /> Push to Dev</Button>
+              <Button onClick={() => handleReviewAction('approve')} className="bg-[#10b981] hover:bg-[#059669] text-white px-8 h-16 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 transition-all active:scale-95">Approve</Button>
+              <Button onClick={() => handleReviewAction('reject')} className="bg-[#ef4444] hover:bg-[#dc2626] text-white px-8 h-16 rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-rose-500/20 transition-all active:scale-95">Reject</Button>
             </div>
           </div>
         )}
@@ -1622,79 +1412,92 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
 
   return (
     <div className="flex h-full w-full flex-col bg-[#f8fafc] font-sans">
-      <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm z-30">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-3">
-            <LayoutGrid className="h-6 w-6 text-slate-700" />
-            <span className="text-lg font-black text-slate-800 uppercase tracking-tighter">Layout Editor</span>
-          </div>
-          <div className="hidden sm:block h-6 w-px bg-slate-200 mx-2"></div>
-          <span className="text-sm font-bold text-slate-500">{factory?.name}</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto md:justify-end">
-          <div className="px-4 py-1.5 bg-slate-100 rounded-lg border border-slate-200">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2">Layout ID-</span>
-            <span className="text-xs font-bold text-slate-600">{layoutId}</span>
-          </div>
-          <Button onClick={() => { if (onSave) onSave(factory); setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2000); }} className="bg-slate-800 hover:bg-slate-900 text-white font-bold h-11 px-6 sm:px-8 rounded-xl shadow-lg shadow-slate-100 w-full sm:w-auto"><Save className="h-4 w-4 mr-2" /> {savedMsg ? 'Saved!' : 'Save Layout'}</Button>
-        </div>
+      <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center gap-4 shadow-sm z-30">
+        <div className="flex items-center gap-3"><LayoutGrid className="h-6 w-6 text-slate-700" /><span className="text-lg font-black text-slate-800 uppercase tracking-tighter">Layout Editor</span></div>
+        <div className="h-6 w-px bg-slate-200 mx-2"></div><span className="text-sm font-bold text-slate-500">{factory?.name}</span><div className="flex-1" /><div className="mr-4 px-4 py-1.5 bg-slate-100 rounded-lg border border-slate-200"><span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2">Layout ID-</span><span className="text-xs font-bold text-slate-600">{layoutId}</span></div><Button onClick={() => { if (onSave) onSave(factory); setSavedMsg(true); setTimeout(() => setSavedMsg(false), 2000); }} className="bg-slate-800 hover:bg-slate-900 text-white font-bold h-11 px-8 rounded-xl shadow-lg shadow-slate-100"><Save className="h-4 w-4 mr-2" /> {savedMsg ? 'Layout Saved!' : 'Save Layout'}</Button>
       </div>
 
-      <div className="bg-slate-50 border-b border-slate-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3 z-30">
-        <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={() => window.location.href = '/developer'} variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white h-11"><ArrowLeft className="h-4 w-4 mr-2" /> Back</Button>
-          <div className="hidden sm:block h-6 w-px bg-slate-200 mx-2"></div>
-          <Button onClick={downloadCSV} variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white h-11"><Download className="h-4 w-4 mr-2" /> Download CSV</Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="rounded-xl border-slate-200 text-indigo-600 font-bold hover:bg-indigo-50 flex items-center gap-2 h-11">
-                <Download className="h-4 w-4" /> Download Blueprint
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="bg-white border-slate-200 text-slate-700 p-2 rounded-xl shadow-2xl">
-              <DropdownMenuItem onClick={() => downloadBlueprint('png')} className="flex items-center gap-2 p-3 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors">
-                <FileImage className="h-4 w-4" /> Export as PNG Image
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => downloadBlueprint('pdf')} className="flex items-center gap-2 p-3 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors">
-                <FileType className="h-4 w-4" /> Export as PDF Document
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+      <div className="bg-slate-50 border-b border-slate-200 px-6 py-3 flex items-center gap-3 z-30">
+        <Button onClick={() => window.location.href = '/developer'} variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white"><ArrowLeft className="h-4 w-4 mr-2" /> Back to Overview</Button>
+        <div className="h-6 w-px bg-slate-200 mx-2"></div>
+        <input 
+          type="file" 
+          id="csv-upload" 
+          className="hidden" 
+          accept=".csv" 
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('name', file.name.replace('.csv', ''));
+
+            try {
+              const response = await fetch('/api/layouts', {
+                method: 'POST',
+                body: formData,
+              });
+
+              if (!response.ok) throw new Error('Upload failed');
+              const result = await response.json();
+              
+              // Visualize immediately
+              updateFactory(result.factory);
+              
+              // Notify parent of new ID and Name
+              if (onLayoutIdChange) {
+                onLayoutIdChange(result.id, result.name || file.name.replace('.csv', ''));
+              }
+              
+              // If we have a router, we could update the URL, but local update is what they asked for
+              setSavedMsg(true);
+              setTimeout(() => setSavedMsg(false), 3000);
+            } catch (err) {
+              console.error('Failed to upload layout', err);
+              alert('Failed to upload layout. Please check the file format.');
+            }
+          }} 
+        />
+        <Button onClick={() => document.getElementById('csv-upload')?.click()} variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white"><Upload className="h-4 w-4 mr-2" /> Upload CSV</Button>
+        <Button onClick={downloadCSV} variant="outline" className="rounded-xl border-slate-200 text-slate-600 font-bold hover:bg-white"><Download className="h-4 w-4 mr-2" /> Download CSV</Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="rounded-xl border-slate-200 text-indigo-600 font-bold hover:bg-indigo-50 flex items-center gap-2">
+              <Download className="h-4 w-4" /> Download Blueprint
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className="bg-white border-slate-200 text-slate-700 p-2 rounded-xl shadow-2xl">
+            <DropdownMenuItem onClick={() => downloadBlueprint('png')} className="flex items-center gap-2 p-3 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors">
+              <FileImage className="h-4 w-4" /> Export as PNG Image
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => downloadBlueprint('pdf')} className="flex items-center gap-2 p-3 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors">
+              <FileType className="h-4 w-4" /> Export as PDF Document
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <div className="flex-1" />
+        <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+          <Button onClick={() => setViewState(p => ({ ...p, targetZoom: Math.max(0.05, p.targetZoom / 1.2) }))} variant="ghost" size="icon" className="h-9 w-9 text-slate-500"><ZoomOut className="h-4 w-4" /></Button><div className="flex items-center px-3 text-[11px] font-bold text-slate-400 min-w-[50px] justify-center">{Math.round(viewState.zoom * 100)}%</div><Button onClick={() => setViewState(p => ({ ...p, targetZoom: Math.min(3, p.targetZoom * 1.2) }))} variant="ghost" size="icon" className="h-9 w-9 text-slate-500"><ZoomIn className="h-4 w-4" /></Button>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm h-11 items-center">
-            <Button onClick={() => handleZoomButton(false)} variant="ghost" size="icon" className="h-9 w-9 text-slate-500"><ZoomOut className="h-4 w-4" /></Button>
-            <div className="flex items-center px-3 text-[11px] font-bold text-slate-400 min-w-[50px] justify-center">{Math.round(viewState.zoom * 100)}%</div>
-            <Button onClick={() => handleZoomButton(true)} variant="ghost" size="icon" className="h-9 w-9 text-slate-500"><ZoomIn className="h-4 w-4" /></Button>
-          </div>
-          <Button onClick={handleFitToScreen} variant="outline" size="icon" className="h-11 w-11 rounded-xl border-slate-200 text-slate-500 shadow-sm hover:bg-white"><Maximize2 className="h-4 w-4" /></Button>
-          <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm h-11 items-center">
-            <Button onClick={undo} disabled={history.length === 0} variant="ghost" size="icon" className="h-9 w-9 text-slate-500 disabled:opacity-30"><Undo2 className="h-4 w-4" /></Button>
-            <Button onClick={redo} disabled={redoStack.length === 0} variant="ghost" size="icon" className="h-9 w-9 text-slate-500 disabled:opacity-30"><Redo2 className="h-4 w-4" /></Button>
-          </div>
-          <Button
-            onClick={() => setShowComments(!showComments)}
-            variant={showComments ? "default" : "outline"}
-            className={`rounded-xl font-bold h-11 transition-all ${showComments ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-100' : 'border-slate-200 text-indigo-600 hover:bg-indigo-50'}`}
-          >
-            <MessageSquare className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">{showComments ? 'Hide Comments' : 'Comments'}</span>
-            <span className="sm:hidden">{showComments ? 'Hide' : 'Comments'}</span>
-          </Button>
-          <Button onClick={() => setShowGrid(!showGrid)} variant={showGrid ? "default" : "outline"} className={`rounded-xl font-bold h-11 ${showGrid ? 'bg-slate-800' : 'border-slate-200 text-slate-500 hover:bg-white'}`}><Grid3x3 className="h-4 w-4 mr-2" /> <span className="hidden sm:inline">Grid</span></Button>
-          <Button
-            onClick={() => window.open('/developer/help', '_blank')}
-            variant="outline"
-            className="rounded-xl border-slate-200 text-indigo-650 font-bold hover:bg-indigo-50 h-11 flex items-center gap-2"
-          >
-            <HelpCircle className="h-4 w-4" />
-            <span className="hidden sm:inline">Guide</span>
-          </Button>
+        <Button onClick={handleFitToScreen} variant="outline" size="icon" className="h-11 w-11 rounded-xl border-slate-200 text-slate-500 shadow-sm hover:bg-white"><Maximize2 className="h-4 w-4" /></Button>
+        <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+          <Button onClick={undo} disabled={history.length === 0} variant="ghost" size="icon" className="h-9 w-9 text-slate-500 disabled:opacity-30"><Undo2 className="h-4 w-4" /></Button>
+          <Button onClick={redo} disabled={redoStack.length === 0} variant="ghost" size="icon" className="h-9 w-9 text-slate-500 disabled:opacity-30"><Redo2 className="h-4 w-4" /></Button>
         </div>
+        <Button 
+          onClick={() => setShowComments(!showComments)} 
+          variant={showComments ? "default" : "outline"} 
+          className={`rounded-xl font-bold h-11 transition-all ${showComments ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-100' : 'border-slate-200 text-indigo-600 hover:bg-indigo-50'}`}
+        >
+          <MessageSquare className="h-4 w-4 mr-2" />
+          {showComments ? 'Hide Comments' : 'Show Comments'}
+        </Button>
+        <Button onClick={() => setShowGrid(!showGrid)} variant={showGrid ? "default" : "outline"} className={`rounded-xl font-bold h-11 ${showGrid ? 'bg-slate-800' : 'border-slate-200 text-slate-500 hover:bg-white'}`}><Grid3x3 className="h-4 w-4 mr-2" /> Grid</Button>
       </div>
 
       <div className="flex flex-1 overflow-hidden relative">
-        <div className={`bg-white border-r border-slate-200 flex flex-col z-20 shadow-sm overflow-y-auto transition-all duration-300 relative ${isSidebarCollapsed ? 'w-0 border-r-0 opacity-0' : 'w-full md:w-[320px] opacity-100'}`}>
+        <div className="w-[320px] bg-white border-r border-slate-200 flex flex-col z-20 shadow-sm overflow-y-auto">
           <div className="p-6 space-y-8">
             <div>
               <div className="flex items-center justify-between mb-4"><h3 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><LayoutGrid className="h-4 w-4 text-slate-600" /> Structure Inspector</h3><span className="text-[9px] font-bold px-2 py-1 bg-slate-100 text-slate-600 rounded-full border border-slate-200 uppercase">Editor</span></div>
@@ -1736,23 +1539,23 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
                 </div>
               </div>
             )}
-
+            
             {selectedFlowId && (
               <div className="bg-sky-900 rounded-3xl p-6 shadow-2xl animate-in fade-in slide-in-from-left-4 duration-300 border border-sky-800">
                 <div className="flex items-center gap-3 mb-6"><div className="p-2.5 rounded-xl bg-white/10 text-white shadow-inner"><Navigation className="h-5 w-5" /></div><div><h4 className="text-sm font-black text-white uppercase tracking-tight">Flow Routing</h4><p className="text-[10px] text-sky-400 font-bold uppercase tracking-widest">Manual Path Editor</p></div></div>
                 <div className="space-y-4">
                   <p className="text-[11px] text-slate-400 font-medium leading-relaxed">
-                    Interactive path editing enabled. Drag the <span className="text-sky-400 font-bold">blue handles</span> on the arrow to adjust the routing.
+                    Interactive path editing enabled. Drag the <span className="text-sky-400 font-bold">blue handles</span> on the arrow to adjust the routing. 
                     End-points remain locked to workstations.
                   </p>
-                  <Button
+                  <Button 
                     onClick={() => {
                       setFactory((prev: any) => ({
                         ...prev,
                         flows: prev.flows.map((f: any) => f.id === selectedFlowId ? { ...f, routingPoints: undefined } : f)
                       }));
                       setSelectedFlowId(null);
-                    }}
+                    }} 
                     className="w-full rounded-2xl bg-white text-sky-900 border border-sky-200 font-black uppercase text-[10px] tracking-widest h-12 hover:bg-sky-50 shadow-sm transition-all active:scale-[0.98]"
                   >
                     Reset to Auto-Route
@@ -1782,43 +1585,25 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
         </div>
 
         <div ref={containerRef} className="flex-1 relative bg-[#0f172a] cursor-crosshair">
-          {/* Sidebar Collapse Toggle Button */}
-          <Button
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            variant="outline"
-            size="icon"
-            className="absolute top-4 left-4 z-30 h-10 w-10 rounded-xl bg-white border-slate-200 text-slate-600 shadow-lg hover:bg-slate-50 transition-all flex items-center justify-center"
-            title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-          >
-            {isSidebarCollapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronDown className="h-5 w-5 md:rotate-90" />}
-          </Button>
-
-          <canvas
-            ref={canvasRef}
-            className="w-full h-full block"
-            style={{ cursor: getCursorStyle() }}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-          />
-          <div className="absolute bottom-6 left-6 right-6 md:right-auto flex flex-wrap md:flex-nowrap items-center gap-3 md:gap-6 px-4 md:px-6 py-3 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200 shadow-2xl z-20">
-            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter"><Move className="h-4 w-4 text-slate-400" /> Pan: Space & Drag</div><div className="h-4 w-px bg-slate-200"></div>
+          <canvas ref={canvasRef} className="w-full h-full block" onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onWheel={e => setViewState(p => ({ ...p, targetZoom: Math.max(0.05, Math.min(5, p.targetZoom * (e.deltaY > 0 ? 0.9 : 1.1))) }))} />
+          <div className="absolute bottom-6 left-6 flex items-center gap-6 px-6 py-3 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-200 shadow-2xl z-20">
+            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter"><Move className="h-4 w-4 text-slate-400" /> Pan: Click Space & Drag</div><div className="h-4 w-px bg-slate-200"></div>
             <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter"><Search className="h-4 w-4 text-slate-400" /> Zoom: Scroll</div><div className="h-4 w-px bg-slate-200"></div>
             <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-tighter"><Maximize2 className="h-4 w-4 text-slate-400" /> Move Machine: Drag Inside Area</div>
           </div>
 
           {selectedFlowId && (
             <div className="absolute bottom-24 left-8 flex items-center gap-2 px-3 py-2 bg-white/95 backdrop-blur-md rounded-xl border border-slate-200 shadow-xl z-30 animate-in slide-in-from-bottom-4 duration-300">
-              <Button
+              <Button 
                 variant="ghost" size="icon" className="h-8 w-8 text-slate-600 hover:bg-slate-100 rounded-lg"
                 onClick={() => {
                   setFactory((prev: any) => ({
                     ...prev,
                     flows: prev.flows.map((f: any) => {
                       if (f.id === selectedFlowId) {
-                        // Simplify to straight line between endpoints
-                        const from = allWcs[f.fromWsId]; const to = allWcs[f.toWsId];
-                        return { ...f, routingPoints: [[from.x + from.width / 2, from.y + from.height / 2], [to.x + to.width / 2, to.y + to.height / 2]] };
+                         // Simplify to straight line between endpoints
+                         const from = allWcs[f.fromWsId]; const to = allWcs[f.toWsId];
+                         return { ...f, routingPoints: [[from.x + from.width/2, from.y + from.height/2], [to.x + to.width/2, to.y + to.height/2]] };
                       }
                       return f;
                     })
@@ -1830,15 +1615,15 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
               <div className="w-px h-4 bg-slate-200" />
               <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-600 hover:bg-slate-100 rounded-lg"><ArrowRight className="h-4 w-4" /></Button>
               <div className="w-px h-4 bg-slate-200" />
-              <Button
+              <Button 
                 variant="ghost" size="icon" className="h-8 w-8 text-slate-600 hover:bg-slate-100 rounded-lg"
                 onClick={() => {
-                  // Resetting to auto-route effectively gives the 'Step' look
-                  setFactory((prev: any) => ({
-                    ...prev,
-                    flows: prev.flows.map((f: any) => f.id === selectedFlowId ? { ...f, routingPoints: undefined } : f)
-                  }));
-                  setSelectedFlowId(null);
+                   // Resetting to auto-route effectively gives the 'Step' look
+                   setFactory((prev: any) => ({
+                      ...prev,
+                      flows: prev.flows.map((f: any) => f.id === selectedFlowId ? { ...f, routingPoints: undefined } : f)
+                   }));
+                   setSelectedFlowId(null);
                 }}
               >
                 <CornerDownRight className="h-4 w-4" />

@@ -64,6 +64,105 @@ const EXCEL_WORKSTATIONS: Record<string, any> = {
   w27: { ws_id: 'W27', process: 'Dispatch', machine: 'Conveyor', status: 'Running', oee: '96', orders: 'ORD-027' },
 };
 
+const resolveWorkstationFlowAnchors = (
+  wsId: string,
+  targetFlowId: string,
+  flowsList: any[],
+  wcsMap: Record<string, any>,
+  getVisualSize: (wc: any) => { width: number; height: number }
+) => {
+  const wsFlows = flowsList.filter((f: any) => f.fromWsId === wsId || f.toWsId === wsId);
+  if (wsFlows.length === 0) return null;
+
+  const ws = wcsMap[wsId];
+  if (!ws) return null;
+  const wsSize = getVisualSize(ws);
+
+  const groups: Record<'top' | 'bottom' | 'left' | 'right', any[]> = {
+    top: [],
+    bottom: [],
+    left: [],
+    right: [],
+  };
+
+  wsFlows.forEach((f: any) => {
+    const isOutgoing = f.fromWsId === wsId;
+    const otherId = isOutgoing ? f.toWsId : f.fromWsId;
+    const otherWs = wcsMap[otherId];
+    if (!otherWs) return;
+
+    const otherSize = getVisualSize(otherWs);
+
+    const dx = (otherWs.x + otherSize.width / 2) - (ws.x + wsSize.width / 2);
+    const dy = (otherWs.y + otherSize.height / 2) - (ws.y + wsSize.height / 2);
+
+    let side: 'top' | 'bottom' | 'left' | 'right';
+    if (Math.abs(dx) > Math.abs(dy)) {
+      if (dx > 0) {
+        side = isOutgoing ? 'right' : 'left';
+      } else {
+        side = isOutgoing ? 'left' : 'right';
+      }
+    } else {
+      if (dy > 0) {
+        side = isOutgoing ? 'bottom' : 'top';
+      } else {
+        side = isOutgoing ? 'top' : 'bottom';
+      }
+    }
+
+    groups[side].push({ flow: f, otherWs, isOutgoing, dx, dy });
+  });
+
+  // Sort each side group so parallel lines never cross
+  groups.top.sort((a, b) => (a.otherWs.x + getVisualSize(a.otherWs).width / 2) - (b.otherWs.x + getVisualSize(b.otherWs).width / 2));
+  groups.bottom.sort((a, b) => (a.otherWs.x + getVisualSize(a.otherWs).width / 2) - (b.otherWs.x + getVisualSize(b.otherWs).width / 2));
+  groups.left.sort((a, b) => (a.otherWs.y + getVisualSize(a.otherWs).height / 2) - (b.otherWs.y + getVisualSize(b.otherWs).height / 2));
+  groups.right.sort((a, b) => (a.otherWs.y + getVisualSize(a.otherWs).height / 2) - (b.otherWs.y + getVisualSize(b.otherWs).height / 2));
+
+  let foundSide: 'top' | 'bottom' | 'left' | 'right' | null = null;
+  let foundIndex = -1;
+  let totalCount = 0;
+
+  for (const side of ['top', 'bottom', 'left', 'right'] as const) {
+    const idx = groups[side].findIndex((item: any) => item.flow.id === targetFlowId);
+    if (idx !== -1) {
+      foundSide = side;
+      foundIndex = idx;
+      totalCount = groups[side].length;
+      break;
+    }
+  }
+
+  if (!foundSide || foundIndex === -1) return null;
+
+  const margin = 15;
+  let x = ws.x;
+  let y = ws.y;
+
+  if (foundSide === 'top' || foundSide === 'bottom') {
+    y = foundSide === 'top' ? ws.y : ws.y + wsSize.height;
+    if (totalCount === 1) {
+      x = ws.x + wsSize.width / 2;
+    } else {
+      const usableWidth = wsSize.width - 2 * margin;
+      const spacing = usableWidth / (totalCount - 1);
+      x = ws.x + margin + foundIndex * spacing;
+    }
+  } else {
+    x = foundSide === 'left' ? ws.x : ws.x + wsSize.width;
+    if (totalCount === 1) {
+      y = ws.y + wsSize.height / 2;
+    } else {
+      const usableHeight = wsSize.height - 2 * margin;
+      const spacing = usableHeight / (totalCount - 1);
+      y = ws.y + margin + foundIndex * spacing;
+    }
+  }
+
+  return [x, y] as [number, number];
+};
+
 const findOrthogonalPath = (
   from: any,
   to: any,
@@ -340,35 +439,38 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     const fromSize = getWcVisualSize(from);
     const toSize = getWcVisualSize(to);
 
+    // Resolve dynamic multi-side distributed anchors
+    let fx, fy, tx, ty;
+    const flowsList = factory.flows || [];
+    const fromAnchor = resolveWorkstationFlowAnchors(from.id, flow.id, flowsList, allWcs, getWcVisualSize);
+    const toAnchor = resolveWorkstationFlowAnchors(to.id, flow.id, flowsList, allWcs, getWcVisualSize);
+
+    if (fromAnchor) {
+      [fx, fy] = fromAnchor;
+    } else {
+      const dx = to.x - from.x; const dy = to.y - from.y;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        fx = (dx > 0 ? (from.x + fromSize.width) : from.x); fy = (from.y + fromSize.height / 2);
+      } else {
+        fx = (from.x + fromSize.width / 2); fy = (dy > 0 ? (from.y + fromSize.height) : from.y);
+      }
+    }
+
+    if (toAnchor) {
+      [tx, ty] = toAnchor;
+    } else {
+      const dx = to.x - from.x; const dy = to.y - from.y;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        tx = (dx > 0 ? to.x : (to.x + toSize.width)); ty = (to.y + toSize.height / 2);
+      } else {
+        tx = (to.x + toSize.width / 2); ty = (dy > 0 ? to.y : (to.y + toSize.height));
+      }
+    }
+
     if (flow.routingPoints && flow.routingPoints.length >= 2) {
       const path: [number, number][] = [...flow.routingPoints.map((pt: any) => [pt[0], pt[1]] as [number, number])];
-      
-      const exitPt = path[1] || [to.x + toSize.width / 2, to.y + toSize.height / 2];
-      const edx = exitPt[0] - (from.x + fromSize.width / 2);
-      const edy = exitPt[1] - (from.y + fromSize.height / 2);
-      let fx, fy;
-      if (Math.abs(edx) > Math.abs(edy)) {
-        fx = edx > 0 ? (from.x + fromSize.width) : from.x;
-        fy = from.y + fromSize.height / 2;
-      } else {
-        fx = from.x + fromSize.width / 2;
-        fy = edy > 0 ? (from.y + fromSize.height) : from.y;
-      }
       path[0] = [fx, fy];
-
-      const entryPt = path[path.length - 2] || [from.x + fromSize.width / 2, from.y + fromSize.height / 2];
-      const endx = (to.x + toSize.width / 2) - entryPt[0];
-      const endy = (to.y + toSize.height / 2) - entryPt[1];
-      let tx, ty;
-      if (Math.abs(endx) > Math.abs(endy)) {
-        tx = endx > 0 ? to.x : (to.x + toSize.width);
-        ty = to.y + toSize.height / 2;
-      } else {
-        tx = to.x + toSize.width / 2;
-        ty = endy > 0 ? to.y : (to.y + toSize.height);
-      }
       path[path.length - 1] = [tx, ty];
-
       return path;
     }
 
@@ -376,15 +478,6 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     const isInternal = from.area?.id === to.area?.id;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const laneSpace = (fIdx % 6 + 1) * 20;
-
-    let fx, fy, tx, ty;
-    if (Math.abs(dx) > Math.abs(dy)) {
-      fx = (dx > 0 ? (from.x + fromSize.width) : from.x); fy = (from.y + fromSize.height / 2);
-      tx = (dx > 0 ? to.x : (to.x + toSize.width)); ty = (to.y + toSize.height / 2);
-    } else {
-      fx = (from.x + fromSize.width / 2); fy = (dy > 0 ? (from.y + fromSize.height) : from.y);
-      tx = (to.x + toSize.width / 2); ty = (dy > 0 ? to.y : (to.y + toSize.height));
-    }
 
     // Try obstacle-aware orthogonal pathfinding first
     try {
@@ -402,7 +495,7 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       }
       return path;
     }
-  }, [getWcVisualSize, allWcs]);
+  }, [getWcVisualSize, allWcs, factory]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -1458,21 +1551,35 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
             const newPts = [...f.routingPoints.map((p: any) => [...p])];
             const from = f.fromWsId === id ? wc : allWcs[f.fromWsId];
             const to = f.toWsId === id ? wc : allWcs[f.toWsId];
-            const fromSize = getWcVisualSize(from);
-            const toSize = getWcVisualSize(to);
-            const fdx = to.x - from.x; const fdy = to.y - from.y;
-            if (f.fromWsId === id) {
+            
+            // Build an updated map of all workstations for this drag frame
+            const wcsMap = { ...allWcs, [id]: wc };
+
+            const fromAnchor = resolveWorkstationFlowAnchors(f.fromWsId, f.id, newFactory.flows, wcsMap, getWcVisualSize);
+            const toAnchor = resolveWorkstationFlowAnchors(f.toWsId, f.id, newFactory.flows, wcsMap, getWcVisualSize);
+
+            if (fromAnchor) {
+              newPts[0] = fromAnchor;
+            } else {
+              const fromSize = getWcVisualSize(from);
+              const fdx = to.x - from.x; const fdy = to.y - from.y;
               newPts[0] = [
                 (Math.abs(fdx) > Math.abs(fdy) ? (fdx > 0 ? (from.x + fromSize.width) : from.x) : (from.x + fromSize.width / 2)),
                 (Math.abs(fdy) >= Math.abs(fdx) ? (fdy > 0 ? (from.y + fromSize.height) : from.y) : (from.y + fromSize.height / 2))
               ];
             }
-            if (f.toWsId === id) {
+
+            if (toAnchor) {
+              newPts[newPts.length - 1] = toAnchor;
+            } else {
+              const toSize = getWcVisualSize(to);
+              const fdx = to.x - from.x; const fdy = to.y - from.y;
               newPts[newPts.length - 1] = [
                 (Math.abs(fdx) > Math.abs(fdy) ? (fdx > 0 ? to.x : (to.x + toSize.width)) : (to.x + toSize.width / 2)),
                 (Math.abs(fdy) >= Math.abs(fdx) ? (fdy > 0 ? to.y : (to.y + toSize.height)) : (to.y + toSize.height / 2))
               ];
             }
+
             return { ...f, routingPoints: newPts };
           }
           return f;

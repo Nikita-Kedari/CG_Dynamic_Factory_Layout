@@ -163,42 +163,26 @@ const resolveWorkstationFlowAnchors = (
   return [x, y] as [number, number];
 };
 
-const findOrthogonalPath = (
+const computeAStarPath = (
+  rfx: number,
+  rfy: number,
+  rtx: number,
+  rty: number,
+  xs: number[],
+  ys: number[],
   from: any,
   to: any,
-  fx: number,
-  fy: number,
-  tx: number,
-  ty: number,
-  fIdx: number,
-  allWcsList: any[],
-  getWcVisualSize: (wc: any) => { width: number; height: number }
-): [number, number][] => {
-  const obstacles = allWcsList;
-  const allX = new Set<number>([fx, tx]);
-  const allY = new Set<number>([fy, ty]);
-
-  obstacles.forEach((wc) => {
-    const { width: w, height: h } = getWcVisualSize(wc);
-    const offset = 15 + (fIdx % 4) * 8;
-    allX.add(wc.x - offset);
-    allX.add(wc.x + w + offset);
-    allY.add(wc.y - offset);
-    allY.add(wc.y + h + offset);
-    allX.add(wc.x + w / 2);
-    allY.add(wc.y + h / 2);
-  });
-
-  const xs = Array.from(allX).sort((a, b) => a - b);
-  const ys = Array.from(allY).sort((a, b) => a - b);
-
-  const startI = xs.indexOf(fx);
-  const startJ = ys.indexOf(fy);
-  const endI = xs.indexOf(tx);
-  const endJ = ys.indexOf(ty);
+  obstacles: any[],
+  getWcVisualSize: (wc: any) => { width: number; height: number },
+  strict: boolean
+): [number, number][] | null => {
+  const startI = xs.indexOf(rfx);
+  const startJ = ys.indexOf(rfy);
+  const endI = xs.indexOf(rtx);
+  const endJ = ys.indexOf(rty);
 
   if (startI === -1 || startJ === -1 || endI === -1 || endJ === -1) {
-    return [[fx, fy], [tx, ty]];
+    return null;
   }
 
   const closed = new Set<string>();
@@ -210,7 +194,9 @@ const findOrthogonalPath = (
   gScore[startKey] = 0;
   dirMap[startKey] = null;
 
-  const openList: { i: number; j: number; f: number }[] = [{ i: startI, j: startJ, f: Math.abs(fx - tx) + Math.abs(fy - ty) }];
+  const openList: { i: number; j: number; f: number }[] = [
+    { i: startI, j: startJ, f: Math.abs(rfx - rtx) + Math.abs(rfy - rty) }
+  ];
 
   while (openList.length > 0) {
     openList.sort((a, b) => a.f - b.f);
@@ -267,47 +253,66 @@ const findOrthogonalPath = (
 
       const dist = Math.abs(nx - currX) + Math.abs(ny - currY);
       let penalty = 0;
+      let hasCollision = false;
 
-      const cx1 = currX + Math.sign(nx - currX) * 2;
-      const cy1 = currY + Math.sign(ny - currY) * 2;
-      const cx2 = nx - Math.sign(nx - currX) * 2;
-      const cy2 = ny - Math.sign(ny - currY) * 2;
+      // 12px strict clearance boundary margin
+      const margin = 12;
 
       for (const wc of obstacles) {
-        if (wc.id === from.id || wc.id === to.id) continue;
+        // Only allow boundary crossing if this segment connects to the start anchor of 'from'
+        if (wc.id === from.id) {
+          const touchesStart = (currX === rfx && currY === rfy) || (nx === rfx && ny === rfy);
+          if (touchesStart) continue;
+        }
+        // Only allow boundary crossing if this segment connects to the end anchor of 'to'
+        if (wc.id === to.id) {
+          const touchesEnd = (currX === rtx && currY === rty) || (nx === rtx && ny === rty);
+          if (touchesEnd) continue;
+        }
+
         const { width: w, height: h } = getWcVisualSize(wc);
-        const rx1 = wc.x - 2;
-        const rx2 = wc.x + w + 2;
-        const ry1 = wc.y - 2;
-        const ry2 = wc.y + h + 2;
+        const rx1 = wc.x - margin;
+        const rx2 = wc.x + w + margin;
+        const ry1 = wc.y - margin;
+        const ry2 = wc.y + h + margin;
+
+        const cx1 = currX + Math.sign(nx - currX) * 2;
+        const cy1 = currY + Math.sign(ny - currY) * 2;
+        const cx2 = nx - Math.sign(nx - currX) * 2;
+        const cy2 = ny - Math.sign(ny - currY) * 2;
 
         if (ndir === 'H') {
           const minX = Math.min(cx1, cx2);
           const maxX = Math.max(cx1, cx2);
           if (cy1 >= ry1 && cy1 <= ry2 && minX < rx2 && maxX > rx1) {
+            hasCollision = true;
             penalty += 1000000;
           }
         } else {
           const minY = Math.min(cy1, cy2);
           const maxY = Math.max(cy1, cy2);
           if (cx1 >= rx1 && cx1 <= rx2 && minY < ry2 && maxY > ry1) {
+            hasCollision = true;
             penalty += 1000000;
           }
         }
       }
 
-      const turnPenalty = (currDir !== null && currDir !== ndir) ? 200 : 0;
+      if (strict && hasCollision) continue;
+
+      // Add turn penalty (600) to ensure straight lines and avoid zig-zag micro-bends
+      const turnPenalty = (currDir !== null && currDir !== ndir) ? 600 : 0;
       const tentG = currG + dist + penalty + turnPenalty;
 
+      const existing = openList.find((node) => node.i === ni && node.j === nj);
       if (gScore[neighborKey] === undefined || tentG < gScore[neighborKey]) {
         gScore[neighborKey] = tentG;
         parent[neighborKey] = currKey;
         dirMap[neighborKey] = ndir;
 
-        const h = Math.abs(nx - tx) + Math.abs(ny - ty);
+        const h = Math.abs(nx - rtx) + Math.abs(ny - rty);
         const f = tentG + h;
 
-        const existing = openList.find((node) => node.i === ni && node.j === nj);
         if (existing) {
           existing.f = f;
         } else {
@@ -317,7 +322,67 @@ const findOrthogonalPath = (
     }
   }
 
-  return [[fx, fy], [tx, fy], [tx, ty]];
+  return null;
+};
+
+const findOrthogonalPath = (
+  from: any,
+  to: any,
+  fx: number,
+  fy: number,
+  tx: number,
+  ty: number,
+  fIdx: number,
+  allWcsList: any[],
+  getWcVisualSize: (wc: any) => { width: number; height: number }
+): [number, number][] => {
+  const obstacles = allWcsList;
+  
+  const rfx = Math.round(fx);
+  const rfy = Math.round(fy);
+  const rtx = Math.round(tx);
+  const rty = Math.round(ty);
+
+  const allX = new Set<number>([rfx, rtx]);
+  const allY = new Set<number>([rfy, rty]);
+
+  obstacles.forEach((wc) => {
+    const { width: w, height: h } = getWcVisualSize(wc);
+    const rx = Math.round(wc.x);
+    const ry = Math.round(wc.y);
+    const rw = Math.round(w);
+    const rh = Math.round(h);
+
+    // Primary offset lanes (15px)
+    allX.add(rx - 15);
+    allX.add(rx + rw + 15);
+    allY.add(ry - 15);
+    allY.add(ry + rh + 15);
+
+    // Outer offset lanes (30px) for flexible parallel routing around tight spots
+    allX.add(rx - 30);
+    allX.add(rx + rw + 30);
+    allY.add(ry - 30);
+    allY.add(ry + rh + 30);
+
+    // Inner line and center points
+    allX.add(rx + Math.round(rw / 2));
+    allY.add(ry + Math.round(rh / 2));
+  });
+
+  const xs = Array.from(allX).sort((a, b) => a - b);
+  const ys = Array.from(allY).sort((a, b) => a - b);
+
+  // First pass: strict obstacle avoidance (hard boundaries)
+  let path = computeAStarPath(rfx, rfy, rtx, rty, xs, ys, from, to, obstacles, getWcVisualSize, true);
+  if (path) return path;
+
+  // Second pass: soft obstacle avoidance (least penalty fallback)
+  path = computeAStarPath(rfx, rfy, rtx, rty, xs, ys, from, to, obstacles, getWcVisualSize, false);
+  if (path) return path;
+
+  // Fallback direct path
+  return [[rfx, rfy], [rtx, rfy], [rtx, rty]];
 };
 
 export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin = false, readOnly = false, layoutId = null }: GridEditorProps) {
@@ -977,12 +1042,14 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       if (delta > 0) {
         setViewState(prev => {
           if (isCapturing) {
+            if (prev.zoom === prev.targetZoom && prev.panX === prev.targetPanX && prev.panY === prev.targetPanY) {
+              return prev;
+            }
             return {
               ...prev,
               zoom: prev.targetZoom,
               panX: prev.targetPanX,
-              panY: prev.targetPanY,
-              time: prev.time + delta
+              panY: prev.targetPanY
             };
           }
           const smoothing = 1 - Math.exp(-15 * delta);
@@ -997,17 +1064,24 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
 
           const isMoving = zoomDiff > 0.0001 || panXDiff > 0.01 || panYDiff > 0.01;
 
-          // We always update 'time' for the dashed flow lines, 
-          // but we can snap zoom/pan if they are close enough to target
+          if (!isMoving) {
+            if (prev.zoom === prev.targetZoom && prev.panX === prev.targetPanX && prev.panY === prev.targetPanY) {
+              return prev;
+            }
+            return {
+              ...prev,
+              zoom: prev.targetZoom,
+              panX: prev.targetPanX,
+              panY: prev.targetPanY
+            };
+          }
+
           const finalZoom = Math.abs(nextZoom - prev.targetZoom) < 0.0001 ? prev.targetZoom : nextZoom;
           const finalPanX = Math.abs(nextPanX - prev.targetPanX) < 0.1 ? prev.targetPanX : nextPanX;
           const finalPanY = Math.abs(nextPanY - prev.targetPanY) < 0.1 ? prev.targetPanY : nextPanY;
 
-          if (!isMoving && Math.abs(prev.time + delta - prev.time) < 0.001) return prev;
-
           return {
             ...prev,
-            time: prev.time + delta,
             zoom: finalZoom,
             panX: finalPanX,
             panY: finalPanY
@@ -1039,7 +1113,11 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    const { zoom, panX, panY } = viewState;
+
+    let animId: number;
+
+    const render = () => {
+      const { zoom, panX, panY } = viewState;
 
     ctx.fillStyle = (isAdmin || isPublicView) ? '#0b0f19' : '#0f172a';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1073,7 +1151,11 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       for (let i = 1; i < points.length; i++) { ctx.lineTo(points[i].x, points[i].y); }
 
       ctx.strokeStyle = color; ctx.lineWidth = 4 * zoom;
-      if (isDashed) { ctx.setLineDash([16 * zoom, 12 * zoom]); ctx.lineDashOffset = -viewState.time * 35 * zoom; }
+      if (isDashed) {
+        ctx.setLineDash([16 * zoom, 12 * zoom]);
+        const timeOffset = (performance.now() / 1000) * 35 * zoom;
+        ctx.lineDashOffset = -timeOffset;
+      }
       ctx.stroke(); ctx.setLineDash([]);
       drawArrowhead(last.x, last.y, angle, color);
     };
@@ -1305,6 +1387,12 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
         }
       }
     });
+      animId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => cancelAnimationFrame(animId);
   }, [factory, viewState, showGrid, activeFilterIds, dynamicWorkstationData, selectedAreaId, selectedWcId, isAdmin, isPublicView, hoveredWcId, isCapturing, showComments]);
 
   const selectedArea = factory.areas.find((a: any) => a.id === (selectedAreaId || ''));

@@ -98,17 +98,9 @@ const resolveWorkstationFlowAnchors = (
 
     let side: 'top' | 'bottom' | 'left' | 'right';
     if (Math.abs(dx) > Math.abs(dy)) {
-      if (dx > 0) {
-        side = isOutgoing ? 'right' : 'left';
-      } else {
-        side = isOutgoing ? 'left' : 'right';
-      }
+      side = dx > 0 ? 'right' : 'left';
     } else {
-      if (dy > 0) {
-        side = isOutgoing ? 'bottom' : 'top';
-      } else {
-        side = isOutgoing ? 'top' : 'bottom';
-      }
+      side = dy > 0 ? 'bottom' : 'top';
     }
 
     groups[side].push({ flow: f, otherWs, isOutgoing, dx, dy });
@@ -346,6 +338,11 @@ const findOrthogonalPath = (
   const allX = new Set<number>([rfx, rtx]);
   const allY = new Set<number>([rfy, rty]);
 
+  // Compute flow-dependent parallel lanes (8px spacing offset)
+  const fLane = fIdx % 4;
+  const offset1 = 15 + fLane * 8; // 15px, 23px, 31px, 39px
+  const offset2 = 30 + fLane * 8; // 30px, 38px, 46px, 54px
+
   obstacles.forEach((wc) => {
     const { width: w, height: h } = getWcVisualSize(wc);
     const rx = Math.round(wc.x);
@@ -353,17 +350,17 @@ const findOrthogonalPath = (
     const rw = Math.round(w);
     const rh = Math.round(h);
 
-    // Primary offset lanes (15px)
-    allX.add(rx - 15);
-    allX.add(rx + rw + 15);
-    allY.add(ry - 15);
-    allY.add(ry + rh + 15);
+    // Primary offset lanes (flow-dependent)
+    allX.add(rx - offset1);
+    allX.add(rx + rw + offset1);
+    allY.add(ry - offset1);
+    allY.add(ry + rh + offset1);
 
-    // Outer offset lanes (30px) for flexible parallel routing around tight spots
-    allX.add(rx - 30);
-    allX.add(rx + rw + 30);
-    allY.add(ry - 30);
-    allY.add(ry + rh + 30);
+    // Outer offset lanes (flow-dependent) for flexible parallel routing around tight spots
+    allX.add(rx - offset2);
+    allX.add(rx + rw + offset2);
+    allY.add(ry - offset2);
+    allY.add(ry + rh + offset2);
 
     // Inner line and center points
     allX.add(rx + Math.round(rw / 2));

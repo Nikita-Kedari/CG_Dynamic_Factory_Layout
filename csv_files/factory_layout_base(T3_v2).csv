@@ -1,0 +1,17 @@
+area_name,area_x,area_y,area_width,area_length,line_name,line_type,ws_code,ws_name,ws_x,ws_y,ws_width,ws_length
+SWP Area,100,100,1100,850,SWP Line,Straight,W1,W1,208,162,90,90
+SWP Area,100,100,1100,850,SWP Line,Straight,W6,W6,448,160,90,90
+SWP Area,100,100,1100,850,SWP Line,Straight,W7,W7,448,320,90,90
+SWP Area,100,100,1100,850,SWP Line,Straight,W2,W2,208,316,90,90
+SWP Area,100,100,1100,850,SWP Line,Straight,W3,W3,209,486,90,90
+SWP Area,100,100,1100,850,SWP Line,Straight,W8,W8,448,488,90,90
+SWP Area,100,100,1100,850,SWP Line,Straight,W9,W9,449,661,90,90
+SWP Area,100,100,1100,850,SWP Line,Straight,W4,W4,209,663,90,90
+SWP Area,100,100,1100,850,SWP Line,Straight,W5,W5,209,830,90,90
+SWP Area,100,100,1100,850,SWP Line,Straight,W10,W10,448,822,90,90
+Engine,100,1100,1400,750,Engine Line,Straight,W11,W11,217,1532,90,90
+Engine,100,1100,1400,750,Engine Line,Straight,W12,W12,470,1530,90,90
+Engine,100,1100,1400,750,Engine Line,Straight,W13,W13,690,1530,90,90
+Engine,100,1100,1400,750,Engine Line,Straight,W14,W14,910,1530,90,90
+Engine,100,1100,1400,750,Engine Line,Straight,W15,W15,1130,1530,90,90
+Engine,100,1100,1400,750,Engine Line,Straight,W16,W16,1350,1530,90,90

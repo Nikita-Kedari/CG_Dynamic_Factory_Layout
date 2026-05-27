@@ -1,16 +1,26 @@
 import { NextResponse } from 'next/server';
-import { updateLayout } from '@/lib/store';
+
+const BACKEND_URL = 'http://localhost:4000';
 
 export async function POST(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const authHeader = request.headers.get('authorization');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authHeader) {
+        headers['authorization'] = authHeader;
+    }
+
     try {
         const { id } = await params;
-        const updated = updateLayout(id, { status: 'pending' });
-        if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-        return NextResponse.json(updated);
-    } catch (error) {
-        return NextResponse.json({ error: 'Failed to pass layout to admin' }, { status: 500 });
+        const res = await fetch(`${BACKEND_URL}/api/layouts/${id}/pass-to-admin`, {
+            method: 'POST',
+            headers
+        });
+        const data = await res.json();
+        return NextResponse.json(data, { status: res.status });
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

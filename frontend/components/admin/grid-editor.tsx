@@ -867,7 +867,52 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleZoomButton, handleFitToScreen]);
 
-  const downloadCSV = () => {
+  const downloadCSV = async () => {
+    // 1. Auto-save layout first if we are not read-only and have an onSave handler
+    if (!readOnly && onSave) {
+      try {
+        await onSave(factory);
+        console.log('Auto-saved layout successfully before CSV export.');
+      } catch (err) {
+        console.error('Failed to auto-save layout before CSV export:', err);
+      }
+    }
+
+    // 2. Try fetching from the backend synchronized CSV endpoint
+    if (layoutId) {
+      try {
+        let token = '';
+        if (typeof window !== 'undefined') {
+          token = localStorage.getItem('factory_auth_token') || '';
+        }
+        
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(`http://localhost:4000/api/layouts/${layoutId}/csv`, { headers });
+        if (!res.ok) throw new Error('Backend failed to generate CSV');
+        
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.setAttribute('hidden', '');
+        a.setAttribute('href', url);
+        a.setAttribute('download', `${factory.name || 'factory_layout'}.csv`);
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        return;
+      } catch (err) {
+        console.warn('Backend CSV sync failed, falling back to local CSV generation:', err);
+      }
+    }
+
+    // 3. Local fallback (if mock environment or backend fails)
+    runLocalCsvDownload();
+  };
+
+  const runLocalCsvDownload = () => {
     const headers = factory.csvHeaders || [
       'area_name', 'area_x', 'area_y', 'area_width', 'area_length',
       'line_name', 'line_type',

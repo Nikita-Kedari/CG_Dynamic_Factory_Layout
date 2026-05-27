@@ -1,0 +1,73 @@
+area_name,area_x,area_y,area_width,area_length,line_name,line_type,ws_code,ws_name,ws_x,ws_y,ws_width,ws_length
+Floor Left,80,60,660,580,Floor Left Line,Automated,W1,W1,119,117,34,28
+Floor Left,80,60,660,580,Floor Left Line,Automated,W2,W2,325,115,34,28
+Floor Left,80,60,660,580,Floor Left Line,Automated,W3,W3,541,116,34,28
+Floor Left,80,60,660,580,Floor Left Line,Automated,W4,W4,543,306,34,28
+Floor Left,80,60,660,580,Floor Left Line,Automated,W5,W5,215,303,34,28
+Floor Left,80,60,660,580,Floor Left Line,Automated,W6,W6,218,492,34,28
+Real Wall,920,60,660,580,Real Wall Line,Automated,W7,W7,973,139,34,28
+Real Wall,920,60,660,580,Real Wall Line,Automated,W8,W8,1188,139,34,28
+Real Wall,920,60,660,580,Real Wall Line,Automated,W9,W9,1394,143,34,28
+Real Wall,920,60,660,580,Real Wall Line,Automated,W10,W10,1399,326,34,28
+Real Wall,920,60,660,580,Real Wall Line,Automated,W11,W11,1024,324,34,28
+Real Wall,920,60,660,580,Real Wall Line,Automated,W12,W12,1024,495,34,28
+Front Wall,1820,60,660,580,Front Wall Line,Automated,W13,W13,1858,123,34,28
+Front Wall,1820,60,660,580,Front Wall Line,Automated,W14,W14,2067,122,34,28
+Front Wall,1820,60,660,580,Front Wall Line,Automated,W15,W15,2307,120,34,28
+Front Wall,1820,60,660,580,Front Wall Line,Automated,W16,W16,2306,294,34,28
+Front Wall,1820,60,660,580,Front Wall Line,Automated,W17,W17,1912,296,34,28
+Front Wall,1820,60,660,580,Front Wall Line,Automated,W18,W18,1908,464,34,28
+Side Panel Left,2680,60,660,580,Side Panel Left Line,Automated,W19,W19,2715,105,34,28
+Side Panel Left,2680,60,660,580,Side Panel Left Line,Automated,W20,W20,2927,104,34,28
+Side Panel Left,2680,60,660,580,Side Panel Left Line,Automated,W21,W21,3130,101,34,28
+Side Panel Left,2680,60,660,580,Side Panel Left Line,Automated,W22,W22,3125,296,34,28
+Side Panel Left,2680,60,660,580,Side Panel Left Line,Automated,W23,W23,2767,297,34,28
+Side Panel Left,2680,60,660,580,Side Panel Left Line,Automated,W24,W24,2767,489,34,28
+Door Left,3580,60,660,580,Door Left Line,Automated,W25,W25,3615,105,34,28
+Door Left,3580,60,660,580,Door Left Line,Automated,W26,W26,3845,108,34,28
+Door Left,3580,60,660,580,Door Left Line,Automated,W27,W27,4085,106,34,28
+Door Left,3580,60,660,580,Door Left Line,Automated,W28,W28,4083,275,34,28
+Door Left,3580,60,660,580,Door Left Line,Automated,W29,W29,3908,470,34,28
+Door Left,3580,60,660,580,Door Left Line,Automated,W30,W30,3667,470,34,28
+Floor Middle,180,860,860,580,Floor Middle Line,Automated,W31,W31,215,927,34,28
+Floor Middle,180,860,860,580,Floor Middle Line,Automated,W32,W32,216,1090,34,28
+Floor Middle,180,860,860,580,Floor Middle Line,Automated,W33,W33,215,1277,34,28
+Floor Middle,180,860,860,580,Floor Middle Line,Automated,W34,W34,447,1083,34,28
+Floor Middle,180,860,860,580,Floor Middle Line,Automated,W35,W35,666,1082,34,28
+Floor Middle,180,860,860,580,Floor Middle Line,Automated,W36,W36,864,1079,34,28
+Main Assembly,1260,860,1850,480,Main Assembly Line,Automated,W37,W37,1290,1065,70,40
+Main Assembly,1260,860,1850,480,Main Assembly Line,Automated,W38,W38,1490,1065,70,40
+Main Assembly,1260,860,1850,480,Main Assembly Line,Automated,W39,W39,1696,1068,70,40
+Main Assembly,1260,860,1850,480,Main Assembly Line,Automated,W40,W40,1904,1066,70,40
+Main Assembly,1260,860,1850,480,Main Assembly Line,Automated,W41,W41,2109,1062,70,40
+Main Assembly,1260,860,1850,480,Main Assembly Line,Automated,W42,W42,2311,1062,70,40
+Main Assembly,1260,860,1850,480,Main Assembly Line,Automated,W43,W43,2519,1062,70,40
+Main Assembly,1260,860,1850,480,Main Assembly Line,Automated,W44,W44,2732,1065,70,40
+Main Assembly,1260,860,1850,480,Main Assembly Line,Automated,W45,W45,2931,1065,70,40
+Finish Line,3280,860,660,450,Finish Line Line,Automated,W46,W46,3339,1062,55,35
+Finish Line,3280,860,660,450,Finish Line Line,Automated,W47,W47,3554,1067,55,35
+Finish Line,3280,860,660,450,Finish Line Line,Automated,W48,W48,3767,1069,55,35
+Floor Right,80,1660,660,580,Floor Right Line,Automated,W49,W49,115,1730,34,28
+Floor Right,80,1660,660,580,Floor Right Line,Automated,W50,W50,113,1890,34,28
+Floor Right,80,1660,660,580,Floor Right Line,Automated,W51,W51,111,2066,34,28
+Floor Right,80,1660,660,580,Floor Right Line,Automated,W52,W52,331,2066,34,28
+Floor Right,80,1660,660,580,Floor Right Line,Automated,W53,W53,338,1892,34,28
+Floor Right,80,1660,660,580,Floor Right Line,Automated,W54,W54,551,1891,34,28
+Roof,980,1660,660,580,Roof Line,Automated,W55,W55,1090,1735,34,28
+Roof,980,1660,660,580,Roof Line,Automated,W56,W56,1088,1902,34,28
+Roof,980,1660,660,580,Roof Line,Automated,W57,W57,1087,2073,34,28
+Roof,980,1660,660,580,Roof Line,Automated,W58,W58,1399,2076,34,28
+Roof,980,1660,660,580,Roof Line,Automated,W59,W59,1401,1898,34,28
+Roof,980,1660,660,580,Roof Line,Automated,W60,W60,1401,1725,34,28
+Side Panel Right,1880,1660,660,580,Side Panel Right Line,Automated,W61,W61,1940,1740,34,28
+Side Panel Right,1880,1660,660,580,Side Panel Right Line,Automated,W62,W62,1938,1933,34,28
+Side Panel Right,1880,1660,660,580,Side Panel Right Line,Automated,W63,W63,2081,2085,34,28
+Side Panel Right,1880,1660,660,580,Side Panel Right Line,Automated,W64,W64,2344,2083,34,28
+Side Panel Right,1880,1660,660,580,Side Panel Right Line,Automated,W65,W65,2343,1898,34,28
+Side Panel Right,1880,1660,660,580,Side Panel Right Line,Automated,W66,W66,2343,1727,34,28
+Door Right,2880,1660,660,580,Door Right Line,Automated,W67,W67,3325,1759,34,28
+Door Right,2880,1660,660,580,Door Right Line,Automated,W68,W68,3330,1939,34,28
+Door Right,2880,1660,660,580,Door Right Line,Automated,W69,W69,3330,2101,34,28
+Door Right,2880,1660,660,580,Door Right Line,Automated,W70,W70,2976,2097,34,28
+Door Right,2880,1660,660,580,Door Right Line,Automated,W71,W71,2978,1944,34,28
+Door Right,2880,1660,660,580,Door Right Line,Automated,W72,W72,2974,1772,34,28

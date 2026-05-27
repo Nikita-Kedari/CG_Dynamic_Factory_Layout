@@ -4,6 +4,7 @@ const router   = express.Router();
 const multer   = require('multer');
 const Papa     = require('papaparse');
 const { getPool, sql } = require('../db');
+const { requireAuth } = require('../middleware/auth');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -17,7 +18,7 @@ const upload = multer({ storage: multer.memoryStorage() });
  * ws_code, ws_name, seq, ws_x, ws_y, ws_width, ws_length, max_operators, power_kw,
  * from_ws, to_ws, distance, transport_type, transfer_time_sec
  */
-router.post('/upload-csv', upload.single('file'), async (req, res) => {
+router.post('/upload-csv', requireAuth, upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
   const csvText = req.file.buffer.toString('utf-8');
@@ -29,17 +30,20 @@ router.post('/upload-csv', upload.single('file'), async (req, res) => {
 
   try {
     // ── 1. Upsert Factory ──────────────────────────────────────────
-    const firstRow = rows[0];
+    const firstRow = rows[0] || {};
+    const factoryCode = (firstRow.factory_code || '').trim() || 'FC-IMPORT';
+    const factoryName = (firstRow.factory_name || '').trim() || factoryCode;
+    
     let factoryId;
     const factRes = await pool.request()
-      .input('code', sql.VarChar, firstRow.factory_code)
+      .input('code', sql.VarChar, factoryCode)
       .query('SELECT factory_id FROM FACTORIES WHERE factory_code = @code');
     if (factRes.recordset.length) {
       factoryId = factRes.recordset[0].factory_id;
     } else {
       const ins = await pool.request()
-        .input('code', sql.VarChar, firstRow.factory_code)
-        .input('name', sql.VarChar, firstRow.factory_name || firstRow.factory_code)
+        .input('code', sql.VarChar, factoryCode)
+        .input('name', sql.VarChar, factoryName)
         .query(`
           INSERT INTO FACTORIES (factory_code, factory_name, created_by)
           OUTPUT INSERTED.factory_id
@@ -62,13 +66,24 @@ router.post('/upload-csv', upload.single('file'), async (req, res) => {
     const layoutId = layoutIns.recordset[0].layout_id;
 
     // ── 3. Create draft Layout Version ────────────────────────────
+    const originalName = req.file ? req.file.originalname : 'draft-import.csv';
+    let defaultVersionName = 'draft-import';
+    if (originalName) {
+      const extIdx = originalName.lastIndexOf('.');
+      defaultVersionName = extIdx !== -1 ? originalName.substring(0, extIdx) : originalName;
+    }
+
     const versionIns = await pool.request()
       .input('lid',  sql.Int,    layoutId)
-      .input('file', sql.VarChar, req.file.originalname)
+      .input('vname', sql.VarChar, defaultVersionName)
+      .input('file', sql.VarChar, originalName)
+      .input('userId', sql.Int,  req.user.userId)
+      .input('username', sql.VarChar, req.user.username)
+      .input('csvText', sql.NVarChar, csvText)
       .query(`
-        INSERT INTO LAYOUT_VERSIONS (layout_id, version_name, source_csv_filename, imported_by, is_current_version, status)
+        INSERT INTO LAYOUT_VERSIONS (layout_id, version_name, source_csv_filename, imported_by, is_current_version, status, user_id, original_csv)
         OUTPUT INSERTED.layout_version_id
-        VALUES (@lid, 'draft-import', @file, 'csv-import', 1, 'draft')
+        VALUES (@lid, @vname, @file, @username, 1, 'draft', @userId, @csvText)
       `);
     const versionId = versionIns.recordset[0].layout_version_id;
     await pool.request()
@@ -79,7 +94,8 @@ router.post('/upload-csv', upload.single('file'), async (req, res) => {
     // ── 4. Deduplicate and insert Areas ───────────────────────────
     const areaMap = {};
     for (const row of rows) {
-      const code = row.area_code;
+      const rawCode = row.area_code || row.area_name;
+      const code = rawCode ? rawCode.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') : '';
       if (!code || areaMap[code]) continue;
       const ins = await pool.request()
         .input('lid',    sql.Int,    layoutId)
@@ -102,10 +118,15 @@ router.post('/upload-csv', upload.single('file'), async (req, res) => {
     // ── 5. Deduplicate and insert Production Lines ─────────────────
     const lineMap = {};
     for (const row of rows) {
-      const code = row.line_code;
+      const rawCode = row.line_code || row.line_name;
+      const code = rawCode ? rawCode.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') : '';
       if (!code || lineMap[code]) continue;
-      const areaId = areaMap[row.area_code];
+      
+      const rawAreaCode = row.area_code || row.area_name;
+      const areaCode = rawAreaCode ? rawAreaCode.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') : '';
+      const areaId = areaMap[areaCode];
       if (!areaId) continue;
+      
       const ins = await pool.request()
         .input('aid',   sql.Int,    areaId)
         .input('code',  sql.VarChar, code)
@@ -128,7 +149,10 @@ router.post('/upload-csv', upload.single('file'), async (req, res) => {
     for (const row of rows) {
       const code = row.ws_code;
       if (!code || wsMap[code]) continue;
-      const lineId = lineMap[row.line_code];
+      
+      const rawLineCode = row.line_code || row.line_name;
+      const lineCode = rawLineCode ? rawLineCode.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') : '';
+      const lineId = lineMap[lineCode];
       if (!lineId) continue;
       const ins = await pool.request()
         .input('lid',    sql.Int,    lineId)

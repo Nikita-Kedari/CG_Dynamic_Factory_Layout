@@ -1,24 +1,28 @@
 import { NextResponse } from 'next/server';
-import { updateLayout } from '@/lib/store';
+
+const BACKEND_URL = 'http://localhost:4000';
 
 export async function POST(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const authHeader = request.headers.get('authorization');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authHeader) {
+        headers['authorization'] = authHeader;
+    }
+
     try {
         const { id } = await params;
         const body = await request.json();
-        const reviewedBy = body.reviewedBy || 'Admin';
-        
-        const updated = updateLayout(id, { 
-            status: 'approved',
-            reviewedBy,
-            reviewedAt: new Date().toISOString()
+        const res = await fetch(`${BACKEND_URL}/api/layouts/${id}/approve`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ reviewed_by: body.reviewedBy || body.reviewed_by })
         });
-        
-        if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-        return NextResponse.json(updated);
-    } catch (error) {
-        return NextResponse.json({ error: 'Failed to approve layout' }, { status: 500 });
+        const data = await res.json();
+        return NextResponse.json(data, { status: res.status });
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

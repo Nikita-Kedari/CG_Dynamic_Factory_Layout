@@ -86,6 +86,38 @@ async function getPool() {
       } catch (tableErr) {
         console.error('⚠️  Failed to check or auto-seed USERS table:', tableErr.message);
       }
+
+      // Auto-migrate: Add user_id to LAYOUT_VERSIONS if missing
+      try {
+        await pool.request().query(`
+          IF NOT EXISTS (
+            SELECT 1 FROM sys.columns 
+            WHERE object_id = OBJECT_ID('LAYOUT_VERSIONS') AND name = 'user_id'
+          )
+          BEGIN
+            ALTER TABLE LAYOUT_VERSIONS ADD user_id INT FOREIGN KEY REFERENCES USERS(user_id) NULL;
+          END
+        `);
+        console.log('✅  LAYOUT_VERSIONS schema migration (user_id check) complete.');
+      } catch (migErr) {
+        console.error('⚠️  Failed to run LAYOUT_VERSIONS migration:', migErr.message);
+      }
+
+      // Auto-migrate: Add original_csv to LAYOUT_VERSIONS if missing
+      try {
+        await pool.request().query(`
+          IF NOT EXISTS (
+            SELECT 1 FROM sys.columns 
+            WHERE object_id = OBJECT_ID('LAYOUT_VERSIONS') AND name = 'original_csv'
+          )
+          BEGIN
+            ALTER TABLE LAYOUT_VERSIONS ADD original_csv NVARCHAR(MAX) NULL;
+          END
+        `);
+        console.log('✅  LAYOUT_VERSIONS schema migration (original_csv check) complete.');
+      } catch (migErr) {
+        console.error('⚠️  Failed to run LAYOUT_VERSIONS original_csv migration:', migErr.message);
+      }
     } catch (err) {
       pool = null;
       console.error('❌  SQL Server connection failed:', err.message);

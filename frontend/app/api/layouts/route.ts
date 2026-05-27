@@ -1,43 +1,44 @@
 
 import { NextResponse } from 'next/server';
-import { getLayouts, addLayout } from '@/lib/store';
-import { parseCSV } from '@/lib/csv-handler';
-import { Configuration } from '@/lib/types';
-import { randomUUID } from 'crypto';
 
-export async function GET() {
-    const layouts = getLayouts();
-    return NextResponse.json(layouts);
+const BACKEND_URL = 'http://localhost:4000';
+
+export async function GET(request: Request) {
+    const authHeader = request.headers.get('authorization');
+    const headers: Record<string, string> = {};
+    if (authHeader) {
+        headers['authorization'] = authHeader;
+    }
+
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/layouts`, {
+            headers,
+            cache: 'no-store'
+        });
+        const data = await res.json();
+        return NextResponse.json(data, { status: res.status });
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 }
 
 export async function POST(request: Request) {
+    const authHeader = request.headers.get('authorization');
+    const headers: Record<string, string> = {};
+    if (authHeader) {
+        headers['authorization'] = authHeader;
+    }
+
     try {
-        const data = await request.formData();
-        const file = data.get('file') as File;
-        const name = data.get('name') as string || 'New Layout';
-
-        if (!file) {
-            return NextResponse.json({ error: 'No file provided' }, { status: 400 });
-        }
-
-        const text = await file.text();
-        const factory = parseCSV(text);
-
-        const newLayout: Configuration = {
-            id: randomUUID(),
-            factory,
-            name,
-            version: `v${Date.now()}`,
-            isActive: false,
-            status: 'draft',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        };
-
-        addLayout(newLayout);
-        return NextResponse.json(newLayout);
-    } catch (error) {
-        console.error('Upload error:', error);
-        return NextResponse.json({ error: 'Failed to process file' }, { status: 500 });
+        const formData = await request.formData();
+        const res = await fetch(`${BACKEND_URL}/api/admin/upload-csv`, {
+            method: 'POST',
+            headers,
+            body: formData
+        });
+        const data = await res.json();
+        return NextResponse.json(data, { status: res.status });
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

@@ -1,24 +1,44 @@
 
 import { NextResponse } from 'next/server';
-import { getActiveLayout, activateLayout } from '@/lib/store';
 
-export async function GET() {
-    const activeLayout = getActiveLayout();
-    return NextResponse.json(activeLayout);
+const BACKEND_URL = 'http://localhost:4000';
+
+export async function GET(request: Request) {
+    const authHeader = request.headers.get('authorization');
+    const headers: Record<string, string> = {};
+    if (authHeader) {
+        headers['authorization'] = authHeader;
+    }
+
+    try {
+        const res = await fetch(`${BACKEND_URL}/api/layouts/active`, {
+            headers,
+            cache: 'no-store'
+        });
+        const data = await res.json();
+        return NextResponse.json(data, { status: res.status });
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
 }
 
 export async function POST(request: Request) {
-    const body = await request.json();
-    const { id } = body;
-
-    if (!id) {
-        return NextResponse.json({ error: 'Layout ID required' }, { status: 400 });
+    const authHeader = request.headers.get('authorization');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authHeader) {
+        headers['authorization'] = authHeader;
     }
 
-    const active = activateLayout(id);
-    if (!active) {
-        return NextResponse.json({ error: 'Layout not found' }, { status: 404 });
+    try {
+        const body = await request.json();
+        const res = await fetch(`${BACKEND_URL}/api/layouts/active`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        return NextResponse.json(data, { status: res.status });
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
-
-    return NextResponse.json(active);
 }

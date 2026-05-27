@@ -1,12 +1,22 @@
 import { NextResponse } from 'next/server';
-import { getLayouts } from '@/lib/store';
 
-export async function GET() {
+const BACKEND_URL = 'http://localhost:4000';
+
+export async function GET(request: Request) {
+    const authHeader = request.headers.get('authorization');
+    const headers: Record<string, string> = {};
+    if (authHeader) {
+        headers['authorization'] = authHeader;
+    }
+
     try {
-        const layouts = getLayouts();
-        const count = layouts.filter(l => l.status === 'pending').length;
-        return NextResponse.json({ count });
-    } catch (error) {
-        return NextResponse.json({ error: 'Failed to get pending count' }, { status: 500 });
+        const res = await fetch(`${BACKEND_URL}/api/layouts/pending-count`, {
+            headers,
+            cache: 'no-store'
+        });
+        const data = await res.json();
+        return NextResponse.json(data, { status: res.status });
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

@@ -23,13 +23,80 @@ export default function ViewPage() {
             return;
         }
 
-        fetch('/api/layouts')
+        fetch(`/api/layouts/${id}`)
             .then(res => res.json())
             .then(data => {
-                const matched = data.find((l: any) => l.id === id);
-                if (matched) {
-                    setLayoutData(matched.factory);
-                    setLayoutName(matched.name);
+                if (data && data.error) {
+                    setError(data.error);
+                    return;
+                }
+
+                if (data && data.version) {
+                    // Map backend database structure to frontend Factory type
+                    const mappedFactory = {
+                        id: (data.version.layout_id || id).toString(),
+                        name: data.version.layout_name,
+                        width: data.canvas.width,
+                        height: data.canvas.length,
+                        gridUnit: 50,
+                        areas: (data.areas || []).map((a: any) => ({
+                            id: a.area_id.toString(),
+                            areaId: a.area_code || a.area_id.toString(),
+                            areaName: a.area_name,
+                            x: a.pos_x,
+                            y: a.pos_y,
+                            width: a.width,
+                            height: a.length,
+                            adminComment: a.admin_comment || '',
+                            lines: (a.lines || []).map((l: any) => ({
+                                id: l.line_id.toString(),
+                                lineId: l.line_code || l.line_id.toString(),
+                                lineName: l.line_name,
+                                x: l.pos_x,
+                                y: l.pos_y,
+                                width: l.width,
+                                height: l.length,
+                                lineType: l.line_type || 'Straight',
+                                workCenters: (l.workstations || []).map((w: any) => ({
+                                    id: w.ws_id.toString(),
+                                    workCenterId: w.ws_code || w.ws_id.toString(),
+                                    name: w.ws_name || w.ws_code || `W${w.ws_id}`,
+                                    machineName: w.ws_name,
+                                    x: w.pos_x,
+                                    y: w.pos_y,
+                                    width: w.width,
+                                    height: w.length,
+                                    status: w.status || 'operational',
+                                    detail: w.detail,
+                                    adminComment: w.admin_comment || '',
+                                    parameters: { 
+                                        ...w,
+                                        ws_id: w.ws_code || w.ws_id.toString(),
+                                        oee: w.oee || 0,
+                                        orders: w.orders || 0
+                                    }
+                                }))
+                            })),
+                            buffers: [],
+                            storage: []
+                        })),
+                        flows: (data.areas || []).flatMap((a: any) => 
+                            (a.lines || []).flatMap((l: any) => 
+                                (l.workstations || []).flatMap((w: any) => 
+                                    (w.flows || []).map((f: any) => ({
+                                        id: f.flow_id.toString(),
+                                        fromWsId: f.from_ws_id.toString(),
+                                        toWsId: f.to_ws_id.toString(),
+                                        arrowType: f.arrow_type || 'escalator',
+                                        label: f.flow_label || 'Flow'
+                                    }))
+                                )
+                            )
+                        )
+                    };
+
+                    setLayoutData(mappedFactory);
+                    setLayoutName(data.version.version_name || data.version.layout_name);
                 } else {
                     setError('Layout not found. Please check the URL and try again.');
                 }

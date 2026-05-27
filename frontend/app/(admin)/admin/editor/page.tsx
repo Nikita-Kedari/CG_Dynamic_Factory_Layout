@@ -2,7 +2,7 @@
 
 import { AuthGuard } from '@/components/auth-guard';
 import { GridEditor } from '@/components/admin/grid-editor';
-import { logout, getCurrentUser } from '@/lib/auth';
+import { logout, getCurrentUser, getCurrentToken } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import { LogOut, Factory, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
@@ -38,30 +38,19 @@ export default function EditorPage() {
 
     const tryLoading = async () => {
       try {
-        // 1. Try Local Mock Store first (for fresh uploads)
-        const localRes = await fetch(`/api/layouts/${id}`);
-        if (localRes.ok) {
-          const localData = await localRes.json();
-          if (localData.factory) {
-            setLayoutData(localData.factory);
-            setLayoutId(localData.id);
-            setLayoutName(localData.name || localData.version);
-            setLoading(false);
-            return;
-          }
-        }
+        const token = getCurrentToken();
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
 
-        // 2. Fallback to SQL Backend (for production data)
-        const baseUrl = 'http://localhost:4000/api';
-        const backendRes = await fetch(`${baseUrl}/layouts/${id}/view`);
-        if (backendRes.ok) {
-          const data = await backendRes.json();
+        const res = await fetch(`/api/layouts/${id}`, { headers });
+        if (res.ok) {
+          const data = await res.json();
           if (data.error) throw new Error(data.error);
 
           // Map backend database structure to frontend Factory type
           const mappedFactory = {
-            id: data.version.layout_id.toString(),
-            name: data.version.layout_name,
+            id: (data.version.layout_id || id).toString(),
+            name: data.version.version_name || data.version.layout_name,
             width: data.canvas.width,
             height: data.canvas.length,
             gridUnit: 50,
@@ -73,6 +62,7 @@ export default function EditorPage() {
               y: a.pos_y,
               width: a.width,
               height: a.length,
+              adminComment: a.admin_comment || '',
               lines: (a.lines || []).map((l: any) => ({
                 id: l.line_id.toString(),
                 lineId: l.line_code || l.line_id.toString(),
@@ -93,6 +83,7 @@ export default function EditorPage() {
                 height: w.length,
                 status: w.status || 'operational',
                 detail: w.detail,
+                adminComment: w.admin_comment || '',
                 parameters: { 
                   ...w,
                   ws_id: w.ws_code || w.ws_id.toString(),
@@ -120,8 +111,8 @@ export default function EditorPage() {
           };
 
           setLayoutData(mappedFactory);
-          setLayoutId(data.version.layout_version_id);
-          setLayoutName(data.version.version_name);
+          setLayoutId(data.version.layout_version_id?.toString() || id);
+          setLayoutName(data.version.version_name || data.version.layout_name);
         }
       } catch (err) {
         console.warn('Layout loading failed:', err);
@@ -155,12 +146,13 @@ export default function EditorPage() {
     }
 
     try {
-      const isLocal = isNaN(Number(layoutId));
-      const baseUrl = isLocal ? '/api' : 'http://localhost:4000/api';
+      const token = getCurrentToken();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
 
-      const response = await fetch(`${baseUrl}/layouts/${layoutId}`, {
+      const response = await fetch(`/api/layouts/${layoutId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ factory })
       });
 

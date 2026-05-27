@@ -1,0 +1,73 @@
+factory_code,factory_name,layout_name,canvas_width,canvas_length,area_code,area_name,area_x,area_y,area_width,area_length,area_type,line_code,line_name,line_type,takt_time_sec,capacity_per_shift,ws_code,ws_name,seq,ws_x,ws_y,ws_width,ws_length,max_operators,power_kw,from_ws,to_ws,distance,transport_type,transfer_time_sec,detail
+F001,Auto Factory,Automotive Body Layout,2200,1200,A1,Floor Left,80,60,660,580,SubAssembly,FL,Floor Left Line,Automated,90,300,W1,W1,1,119,117,34,28,2,8,W1,W2,,,,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A1,Floor Left,80,60,660,580,SubAssembly,FL,Floor Left Line,Automated,90,300,W2,W2,2,325,115,34,28,2,8,W2,W3,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A1,Floor Left,80,60,660,580,SubAssembly,FL,Floor Left Line,Automated,90,300,W3,W3,3,541,116,34,28,2,8,W3,W4,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A1,Floor Left,80,60,660,580,SubAssembly,FL,Floor Left Line,Automated,90,300,W4,W4,4,543,306,34,28,2,8,W4,W5,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A1,Floor Left,80,60,660,580,SubAssembly,FL,Floor Left Line,Automated,90,300,W5,W5,5,215,303,34,28,2,8,W5,W6,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A1,Floor Left,80,60,660,580,SubAssembly,FL,Floor Left Line,Automated,90,300,W6,W6,6,218,492,34,28,2,8,W6,W31,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A2,Real Wall,920,60,660,580,SubAssembly,RW,Real Wall Line,Automated,90,300,W7,W7,1,973,139,34,28,2,8,W7,W8,,,,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A2,Real Wall,920,60,660,580,SubAssembly,RW,Real Wall Line,Automated,90,300,W8,W8,2,1188,139,34,28,2,8,W8,W9,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A2,Real Wall,920,60,660,580,SubAssembly,RW,Real Wall Line,Automated,90,300,W9,W9,3,1394,143,34,28,2,8,W9,W10,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A2,Real Wall,920,60,660,580,SubAssembly,RW,Real Wall Line,Automated,90,300,W10,W10,4,1399,326,34,28,2,8,W10,W11,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A2,Real Wall,920,60,660,580,SubAssembly,RW,Real Wall Line,Automated,90,300,W11,W11,5,1024,324,34,28,2,8,W11,W12,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A2,Real Wall,920,60,660,580,SubAssembly,RW,Real Wall Line,Automated,90,300,W12,W12,6,1024,495,34,28,2,8,W12,W38,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A3,Front Wall,1820,60,660,580,SubAssembly,FW,Front Wall Line,Automated,90,300,W13,W13,1,1858,123,34,28,2,8,W13,W14,,,,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A3,Front Wall,1820,60,660,580,SubAssembly,FW,Front Wall Line,Automated,90,300,W14,W14,2,2067,122,34,28,2,8,W14,W15,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A3,Front Wall,1820,60,660,580,SubAssembly,FW,Front Wall Line,Automated,90,300,W15,W15,3,2307,120,34,28,2,8,W15,W16,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A3,Front Wall,1820,60,660,580,SubAssembly,FW,Front Wall Line,Automated,90,300,W16,W16,4,2306,294,34,28,2,8,W16,W17,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A3,Front Wall,1820,60,660,580,SubAssembly,FW,Front Wall Line,Automated,90,300,W17,W17,5,1912,296,34,28,2,8,W17,W18,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A3,Front Wall,1820,60,660,580,SubAssembly,FW,Front Wall Line,Automated,90,300,W18,W18,6,1908,464,34,28,2,8,W18,W40,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A4,Side Panel Left,2680,60,660,580,SubAssembly,SPL,Side Panel Left Line,Automated,90,300,W19,W19,1,2715,105,34,28,2,8,W19,W20,,,,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A4,Side Panel Left,2680,60,660,580,SubAssembly,SPL,Side Panel Left Line,Automated,90,300,W20,W20,2,2927,104,34,28,2,8,W20,W21,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A4,Side Panel Left,2680,60,660,580,SubAssembly,SPL,Side Panel Left Line,Automated,90,300,W21,W21,3,3130,101,34,28,2,8,W21,W22,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A4,Side Panel Left,2680,60,660,580,SubAssembly,SPL,Side Panel Left Line,Automated,90,300,W22,W22,4,3125,296,34,28,2,8,W22,W23,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A4,Side Panel Left,2680,60,660,580,SubAssembly,SPL,Side Panel Left Line,Automated,90,300,W23,W23,5,2767,297,34,28,2,8,W23,W24,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A4,Side Panel Left,2680,60,660,580,SubAssembly,SPL,Side Panel Left Line,Automated,90,300,W24,W24,6,2767,489,34,28,2,8,W24,W42,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A5,Door Left,3580,60,660,580,SubAssembly,DL,Door Left Line,Automated,90,300,W25,W25,1,3615,105,34,28,2,8,W25,W26,,,,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A5,Door Left,3580,60,660,580,SubAssembly,DL,Door Left Line,Automated,90,300,W26,W26,2,3845,108,34,28,2,8,W26,W27,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A5,Door Left,3580,60,660,580,SubAssembly,DL,Door Left Line,Automated,90,300,W27,W27,3,4085,106,34,28,2,8,W27,W28,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A5,Door Left,3580,60,660,580,SubAssembly,DL,Door Left Line,Automated,90,300,W28,W28,4,4083,275,34,28,2,8,W28,W29,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A5,Door Left,3580,60,660,580,SubAssembly,DL,Door Left Line,Automated,90,300,W29,W29,5,3908,470,34,28,2,8,W29,W30,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A5,Door Left,3580,60,660,580,SubAssembly,DL,Door Left Line,Automated,90,300,W30,W30,6,3667,470,34,28,2,8,W30,W44,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A6,Floor Middle,180,860,860,580,SubAssembly,FM,Floor Middle Line,Automated,90,300,W31,W31,1,215,927,34,28,2,8,W31,W32,,,,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A6,Floor Middle,180,860,860,580,SubAssembly,FM,Floor Middle Line,Automated,90,300,W32,W32,2,216,1090,34,28,2,8,W32,W34,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A6,Floor Middle,180,860,860,580,SubAssembly,FM,Floor Middle Line,Automated,90,300,W33,W33,3,215,1277,34,28,2,8,W33,W32,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A6,Floor Middle,180,860,860,580,SubAssembly,FM,Floor Middle Line,Automated,90,300,W34,W34,4,447,1083,34,28,2,8,W34,W35,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A6,Floor Middle,180,860,860,580,SubAssembly,FM,Floor Middle Line,Automated,90,300,W35,W35,5,666,1082,34,28,2,8,W35,W36,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A6,Floor Middle,180,860,860,580,SubAssembly,FM,Floor Middle Line,Automated,90,300,W36,W36,6,864,1079,34,28,2,8,W36,W37,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A7,Main Assembly,1260,860,1850,480,Assembly,MAL,Main Assembly Line,Automated,90,300,W37,W37,1,1290,1065,70,40,2,8,W37,W38,,,,Main assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A7,Main Assembly,1260,860,1850,480,Assembly,MAL,Main Assembly Line,Automated,90,300,W38,W38,2,1490,1065,70,40,2,8,W38,W39,60,Conveyor,10,Main assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A7,Main Assembly,1260,860,1850,480,Assembly,MAL,Main Assembly Line,Automated,90,300,W39,W39,3,1696,1068,70,40,2,8,W39,W40,60,Conveyor,10,Main assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A7,Main Assembly,1260,860,1850,480,Assembly,MAL,Main Assembly Line,Automated,90,300,W40,W40,4,1904,1066,70,40,2,8,W40,W41,60,Conveyor,10,Main assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A7,Main Assembly,1260,860,1850,480,Assembly,MAL,Main Assembly Line,Automated,90,300,W41,W41,5,2109,1062,70,40,2,8,W41,W42,60,Conveyor,10,Main assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A7,Main Assembly,1260,860,1850,480,Assembly,MAL,Main Assembly Line,Automated,90,300,W42,W42,6,2311,1062,70,40,2,8,W42,W43,60,Conveyor,10,Main assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A7,Main Assembly,1260,860,1850,480,Assembly,MAL,Main Assembly Line,Automated,90,300,W43,W43,7,2519,1062,70,40,2,8,W43,W44,60,Conveyor,10,Main assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A7,Main Assembly,1260,860,1850,480,Assembly,MAL,Main Assembly Line,Automated,90,300,W44,W44,8,2732,1065,70,40,2,8,W44,W45,60,Conveyor,10,Main assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A7,Main Assembly,1260,860,1850,480,Assembly,MAL,Main Assembly Line,Automated,90,300,W45,W45,9,2931,1065,70,40,2,8,W45,W46,60,Conveyor,10,Main assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A8,Finish Line,3280,860,660,450,Finish,FIN,Finish Line Line,Automated,90,300,W46,W46,1,3339,1062,55,35,2,8,W46,W47,,,,Finish process
+F001,Auto Factory,Automotive Body Layout,2200,1200,A8,Finish Line,3280,860,660,450,Finish,FIN,Finish Line Line,Automated,90,300,W47,W47,2,3554,1067,55,35,2,8,W47,W48,60,Conveyor,10,Finish process
+F001,Auto Factory,Automotive Body Layout,2200,1200,A8,Finish Line,3280,860,660,450,Finish,FIN,Finish Line Line,Automated,90,300,W48,W48,3,3767,1069,55,35,2,8,,,60,Conveyor,10,Finish process
+F001,Auto Factory,Automotive Body Layout,2200,1200,A9,Floor Right,80,1660,660,580,SubAssembly,FR,Floor Right Line,Automated,90,300,W49,W49,1,115,1730,34,28,2,8,W49,W50,,,,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A9,Floor Right,80,1660,660,580,SubAssembly,FR,Floor Right Line,Automated,90,300,W50,W50,2,113,1890,34,28,2,8,W50,W51,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A9,Floor Right,80,1660,660,580,SubAssembly,FR,Floor Right Line,Automated,90,300,W51,W51,3,111,2066,34,28,2,8,W51,W52,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A9,Floor Right,80,1660,660,580,SubAssembly,FR,Floor Right Line,Automated,90,300,W52,W52,4,331,2066,34,28,2,8,W52,W53,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A9,Floor Right,80,1660,660,580,SubAssembly,FR,Floor Right Line,Automated,90,300,W53,W53,5,338,1892,34,28,2,8,W53,W54,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A9,Floor Right,80,1660,660,580,SubAssembly,FR,Floor Right Line,Automated,90,300,W54,W54,6,551,1891,34,28,2,8,W54,W33,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A10,Roof,980,1660,660,580,SubAssembly,RF,Roof Line,Automated,90,300,W55,W55,1,1090,1735,34,28,2,8,W55,W56,,,,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A10,Roof,980,1660,660,580,SubAssembly,RF,Roof Line,Automated,90,300,W56,W56,2,1088,1902,34,28,2,8,W56,W57,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A10,Roof,980,1660,660,580,SubAssembly,RF,Roof Line,Automated,90,300,W57,W57,3,1087,2073,34,28,2,8,W57,W58,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A10,Roof,980,1660,660,580,SubAssembly,RF,Roof Line,Automated,90,300,W58,W58,4,1399,2076,34,28,2,8,W58,W59,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A10,Roof,980,1660,660,580,SubAssembly,RF,Roof Line,Automated,90,300,W59,W59,5,1401,1898,34,28,2,8,W59,W60,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A10,Roof,980,1660,660,580,SubAssembly,RF,Roof Line,Automated,90,300,W60,W60,6,1401,1725,34,28,2,8,W60,W39,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A11,Side Panel Right,1880,1660,660,580,SubAssembly,SPR,Side Panel Right Line,Automated,90,300,W61,W61,1,1940,1740,34,28,2,8,W61,W62,,,,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A11,Side Panel Right,1880,1660,660,580,SubAssembly,SPR,Side Panel Right Line,Automated,90,300,W62,W62,2,1938,1933,34,28,2,8,W62,W63,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A11,Side Panel Right,1880,1660,660,580,SubAssembly,SPR,Side Panel Right Line,Automated,90,300,W63,W63,3,2081,2085,34,28,2,8,W63,W64,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A11,Side Panel Right,1880,1660,660,580,SubAssembly,SPR,Side Panel Right Line,Automated,90,300,W64,W64,4,2344,2083,34,28,2,8,W64,W65,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A11,Side Panel Right,1880,1660,660,580,SubAssembly,SPR,Side Panel Right Line,Automated,90,300,W65,W65,5,2343,1898,34,28,2,8,W65,W66,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A11,Side Panel Right,1880,1660,660,580,SubAssembly,SPR,Side Panel Right Line,Automated,90,300,W66,W66,6,2343,1727,34,28,2,8,W66,W41,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A12,Door Right,2880,1660,660,580,SubAssembly,DR,Door Right Line,Automated,90,300,W67,W67,1,3325,1759,34,28,2,8,W67,W68,,,,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A12,Door Right,2880,1660,660,580,SubAssembly,DR,Door Right Line,Automated,90,300,W68,W68,2,3330,1939,34,28,2,8,W68,W69,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A12,Door Right,2880,1660,660,580,SubAssembly,DR,Door Right Line,Automated,90,300,W69,W69,3,3330,2101,34,28,2,8,W69,W70,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A12,Door Right,2880,1660,660,580,SubAssembly,DR,Door Right Line,Automated,90,300,W70,W70,4,2976,2097,34,28,2,8,W70,W71,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A12,Door Right,2880,1660,660,580,SubAssembly,DR,Door Right Line,Automated,90,300,W71,W71,5,2978,1944,34,28,2,8,W71,W72,60,Conveyor,10,Sub assembly
+F001,Auto Factory,Automotive Body Layout,2200,1200,A12,Door Right,2880,1660,660,580,SubAssembly,DR,Door Right Line,Automated,90,300,W72,W72,6,2974,1772,34,28,2,8,W72,W43,60,Conveyor,10,Sub assembly

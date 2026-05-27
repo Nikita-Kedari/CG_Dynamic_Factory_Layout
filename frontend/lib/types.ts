@@ -93,6 +93,9 @@ export interface Flow {
   toWsId: string;
   arrowType: string;
   label: string;
+  fromSide?: 'top' | 'bottom' | 'left' | 'right';
+  toSide?: 'top' | 'bottom' | 'left' | 'right';
+  routingPoints?: [number, number][];
 }
 
 // Factory - top-level container

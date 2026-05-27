@@ -2,7 +2,7 @@
 
 import { AuthGuard } from '@/components/auth-guard';
 import { Button } from '@/components/ui/button';
-import { logout, getCurrentUser } from '@/lib/auth';
+import { logout, getCurrentUser, getCurrentToken } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import {
   Upload,
@@ -37,10 +37,18 @@ export default function AdminPage() {
   }, []);
 
   const fetchLayouts = async () => {
+    const token = getCurrentToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     try {
-      const res = await fetch('/api/layouts');
+      const res = await fetch('/api/layouts', { headers });
       const data = await res.json();
-      setLayouts(data.filter((l: any) => l.status !== 'draft'));
+      if (Array.isArray(data)) {
+        setLayouts(data.filter((l: any) => l.status !== 'draft'));
+      } else {
+        setLayouts([]);
+      }
     } catch (error) {
       console.error('Failed to fetch layouts', error);
     }
@@ -48,10 +56,14 @@ export default function AdminPage() {
 
   const handleApprove = async (id: string) => {
     setLoading(true);
+    const token = getCurrentToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     try {
       await fetch(`/api/layouts/${id}/approve`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ reviewedBy: user?.username || 'Admin' }),
       });
       await fetchLayouts();
@@ -65,20 +77,16 @@ export default function AdminPage() {
     if (comment === null) return; // User cancelled
 
     setLoading(true);
+    const token = getCurrentToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     try {
       await fetch(`/api/layouts/${id}/reject`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reviewedBy: user?.username || 'Admin' }),
+        headers,
+        body: JSON.stringify({ reviewedBy: user?.username || 'Admin', adminComments: comment }),
       });
-
-      if (comment) {
-        await fetch(`/api/layouts/${id}/comment`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ adminComments: comment, reviewedBy: user?.username || 'Admin' }),
-        });
-      }
 
       await fetchLayouts();
     } finally {
@@ -88,10 +96,14 @@ export default function AdminPage() {
 
   const handleActivate = async (id: string) => {
     setLoading(true);
+    const token = getCurrentToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     try {
       await fetch('/api/layouts/active', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ id }),
       });
       await fetchLayouts();
@@ -256,7 +268,7 @@ export default function AdminPage() {
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex justify-end gap-2">
                           <Link href={`/admin/editor?id=${layout.id}`}>
-                            <Button variant="outline" size="sm" className="h-9 px-3 text-slate-700 border-slate-200 hover:bg-slate-50">
+                            <Button className="h-9 px-3 text-slate-700 border border-slate-200 bg-white hover:bg-slate-800 hover:text-white hover:border-slate-800 hover:scale-[1.02] hover:shadow-md active:scale-95 transition-all duration-200 text-xs font-medium rounded-md">
                                View
                             </Button>
                           </Link>

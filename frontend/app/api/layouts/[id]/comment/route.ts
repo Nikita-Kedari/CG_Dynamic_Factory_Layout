@@ -1,30 +1,32 @@
 import { NextResponse } from 'next/server';
-import { updateLayout } from '@/lib/store';
+
+const BACKEND_URL = 'http://localhost:4000';
 
 export async function POST(
     request: Request,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const authHeader = request.headers.get('authorization');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (authHeader) {
+        headers['authorization'] = authHeader;
+    }
+
     try {
         const { id } = await params;
         const body = await request.json();
-        const adminComments = body.admin_comments || body.adminComments;
-        const status = body.status;
-        const reviewedBy = body.reviewed_by || body.reviewedBy || 'Admin';
-        
-        const updates: any = { 
-            adminComments,
-            reviewedBy,
-            reviewedAt: new Date().toISOString()
-        };
-
-        if (status) updates.status = status;
-        
-        const updated = updateLayout(id, updates);
-        
-        if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-        return NextResponse.json(updated);
-    } catch (error) {
-        return NextResponse.json({ error: 'Failed to add comment' }, { status: 500 });
+        const res = await fetch(`${BACKEND_URL}/api/layouts/${id}/comment`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                admin_comments: body.admin_comments || body.adminComments || '',
+                reviewed_by: body.reviewed_by || body.reviewedBy || 'Admin',
+                status: body.status
+            })
+        });
+        const data = await res.json();
+        return NextResponse.json(data, { status: res.status });
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

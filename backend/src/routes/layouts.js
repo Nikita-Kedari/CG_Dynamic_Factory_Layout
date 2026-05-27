@@ -1,13 +1,15 @@
 // src/routes/layouts.js  — Full layout management routes
 const express = require('express');
 const router  = express.Router();
+const Papa    = require('papaparse');
 const { getPool, sql } = require('../db');
+const { requireAuth } = require('../middleware/auth');
 
 // ──────────────────────────────────────────────
 // GET /api/layouts/pending-count
 // Returns count of versions with status='pending' (for admin badge)
 // ──────────────────────────────────────────────
-router.get('/pending-count', async (req, res) => {
+router.get('/pending-count', requireAuth, async (req, res) => {
   try {
     const pool = await getPool();
     const result = await pool.request().query(
@@ -23,10 +25,13 @@ router.get('/pending-count', async (req, res) => {
 // GET /api/layouts
 // Returns all layout versions (flat list) with status for dashboard tables
 // ──────────────────────────────────────────────
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const pool = await getPool();
-    const result = await pool.request().query(`
+    const role = req.user.role;
+    const userId = req.user.userId;
+
+    let queryStr = `
       SELECT
         lv.layout_version_id  AS id,
         lv.version_name       AS version,
@@ -45,8 +50,18 @@ router.get('/', async (req, res) => {
       FROM LAYOUT_VERSIONS lv
       JOIN LAYOUTS   l ON l.layout_id  = lv.layout_id
       JOIN FACTORIES f ON f.factory_id = l.factory_id
-      ORDER BY lv.layout_version_id DESC
-    `);
+    `;
+
+    const request = pool.request();
+
+    if (role === 'developer') {
+      queryStr += ` WHERE lv.user_id = @userId `;
+      request.input('userId', sql.Int, userId);
+    }
+
+    queryStr += ` ORDER BY lv.layout_version_id DESC`;
+
+    const result = await request.query(queryStr);
     res.json(result.recordset);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -57,7 +72,7 @@ router.get('/', async (req, res) => {
 // GET /api/layouts/active
 // Returns the full nested hierarchy of the latest current version
 // ──────────────────────────────────────────────
-router.get('/active', async (req, res) => {
+router.get('/active', requireAuth, async (req, res) => {
   try {
     const pool = await getPool();
 
@@ -79,6 +94,42 @@ router.get('/active', async (req, res) => {
     return buildAndSendLayout(pool, version, res);
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────
+// POST /api/layouts/active
+// Make a layout version live / active
+// Body: { id }
+// ──────────────────────────────────────────────
+router.post('/active', requireAuth, async (req, res) => {
+  const { id } = req.body;
+  if (!id) return res.status(400).json({ error: 'Layout version ID required' });
+
+  try {
+    const pool = await getPool();
+
+    // 1. Get layout_id for this version
+    const lvRes = await pool.request()
+      .input('vid', sql.Int, parseInt(id))
+      .query('SELECT layout_id FROM LAYOUT_VERSIONS WHERE layout_version_id = @vid');
+
+    if (!lvRes.recordset.length) return res.status(404).json({ error: 'Version not found' });
+    const layoutId = lvRes.recordset[0].layout_id;
+
+    // 2. Set all other versions of this layout to inactive
+    await pool.request()
+      .input('lid', sql.Int, layoutId)
+      .query('UPDATE LAYOUT_VERSIONS SET is_current_version = 0 WHERE layout_id = @lid');
+
+    // 3. Set this version to active
+    await pool.request()
+      .input('vid', sql.Int, parseInt(id))
+      .query('UPDATE LAYOUT_VERSIONS SET is_current_version = 1 WHERE layout_version_id = @vid');
+
+    res.json({ success: true, message: 'Layout version is now live' });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -115,9 +166,258 @@ router.get('/:id/view', async (req, res) => {
 });
 
 // ──────────────────────────────────────────────
+// GET /api/layouts/:versionId/csv
+// Export the synchronized CSV from the latest saved state of a layout version
+// ──────────────────────────────────────────────
+router.get('/:versionId/csv', requireAuth, async (req, res) => {
+  const versionId = parseInt(req.params.versionId);
+  try {
+    const pool = await getPool();
+
+    // 1. Get the layout version metadata and original CSV
+    const lvRes = await pool.request()
+      .input('vid', sql.Int, versionId)
+      .query('SELECT * FROM LAYOUT_VERSIONS WHERE layout_version_id = @vid');
+
+    if (!lvRes.recordset.length) return res.status(404).json({ error: 'Layout version not found' });
+    const version = lvRes.recordset[0];
+    const originalCsvText = version.original_csv;
+
+    // 2. Fetch the latest saved state from the database
+    // Fetch areas, production lines, and workstations
+    const wsRes = await pool.request()
+      .input('vid', sql.Int, versionId)
+      .query(`
+        SELECT 
+          w.*, 
+          pl.line_type, pl.external_line_code, pl.line_name, pl.takt_time_sec, pl.capacity_per_shift,
+          a.external_area_code, a.area_name, a.pos_x AS area_x, a.pos_y AS area_y, a.width AS area_width, a.length AS area_length, a.area_type
+        FROM WORKSTATIONS w
+        JOIN PRODUCTION_LINES pl ON pl.line_id = w.line_id
+        JOIN AREAS a ON a.area_id = pl.area_id
+        WHERE pl.layout_version_id = @vid
+      `);
+
+    const workstations = wsRes.recordset;
+
+    // Fetch flows
+    const flowsRes = await pool.request()
+      .input('vid', sql.Int, versionId)
+      .query(`
+        SELECT wf.*, w1.ws_code AS from_code, w2.ws_code AS to_code
+        FROM WORKSTATION_FLOW wf
+        JOIN WORKSTATIONS w1 ON w1.ws_id = wf.from_ws_id
+        JOIN WORKSTATIONS w2 ON w2.ws_id = wf.to_ws_id
+        JOIN PRODUCTION_LINES pl ON pl.line_id = w1.line_id
+        WHERE pl.layout_version_id = @vid
+      `);
+
+    const databaseFlows = flowsRes.recordset;
+
+    // 3. If there is no original CSV saved, fallback to generating a clean CSV from scratch
+    if (!originalCsvText) {
+      const fallbackHeaders = [
+        'area_name', 'area_x', 'area_y', 'area_width', 'area_length', 'area_type',
+        'line_name', 'line_type', 'takt_time_sec', 'capacity_per_shift',
+        'ws_code', 'ws_name', 'ws_x', 'ws_y', 'ws_width', 'ws_length', 'max_operators', 'power_kw',
+        'from_ws', 'to_ws', 'distance', 'transport_type', 'transfer_time_sec', 'detail'
+      ];
+      
+      const newRows = [];
+      const flowMap = {};
+      databaseFlows.forEach(f => {
+        if (!flowMap[f.from_code]) flowMap[f.from_code] = f;
+      });
+
+      workstations.forEach(w => {
+        const flow = flowMap[w.ws_code] || {};
+        newRows.push({
+          area_name: w.area_name,
+          area_x: Math.round(w.area_x),
+          area_y: Math.round(w.area_y),
+          area_width: Math.round(w.area_width),
+          area_length: Math.round(w.area_length),
+          area_type: w.area_type,
+          line_name: w.line_name,
+          line_type: w.line_type,
+          takt_time_sec: w.takt_time_sec,
+          capacity_per_shift: w.capacity_per_shift,
+          ws_code: w.ws_code,
+          ws_name: w.ws_name,
+          ws_x: Math.round(w.pos_x),
+          ws_y: Math.round(w.pos_y),
+          ws_width: Math.round(w.width),
+          ws_length: Math.round(w.length),
+          max_operators: w.max_operators,
+          power_kw: w.power_requirement_kw,
+          from_ws: flow.from_code || '',
+          to_ws: flow.to_code || '',
+          distance: flow.distance || '',
+          transport_type: flow.transport_type || '',
+          transfer_time_sec: flow.avg_transfer_time_sec || '',
+          detail: w.detail || ''
+        });
+      });
+
+      const csvString = Papa.unparse({ fields: fallbackHeaders, data: newRows });
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=${encodeURIComponent(version.version_name)}.csv`);
+      return res.send(csvString);
+    }
+
+    // 4. Parse original CSV to do a round-trip synchronization
+    const { data: originalRows, meta } = Papa.parse(originalCsvText, { header: true, skipEmptyLines: true });
+    const headers = meta.fields;
+
+    // Create workstation lookups
+    const wsLookup = {};
+    workstations.forEach(w => {
+      if (w.ws_code) wsLookup[w.ws_code.toLowerCase()] = w;
+      if (w.ws_name) wsLookup[w.ws_name.toLowerCase()] = w;
+    });
+
+    const usedWcIds = new Set();
+    const updatedRows = [];
+
+    // Map each original CSV row to updated database values
+    for (const row of originalRows) {
+      const wsCode = (row.ws_code || '').trim().toLowerCase();
+      const wsName = (row.ws_name || '').trim().toLowerCase();
+      const ws = wsLookup[wsCode] || wsLookup[wsName];
+
+      if (ws) {
+        usedWcIds.add(ws.ws_id);
+        const updatedRow = { ...row };
+
+        // Map database updates into the row, matching key casing from headers
+        headers.forEach(h => {
+          const lowerH = h.toLowerCase();
+
+          // Area level
+          if (lowerH === 'area_name') updatedRow[h] = ws.area_name;
+          if (lowerH === 'area_x') updatedRow[h] = Math.round(ws.area_x);
+          if (lowerH === 'area_y') updatedRow[h] = Math.round(ws.area_y);
+          if (lowerH === 'area_width') updatedRow[h] = Math.round(ws.area_width);
+          if (lowerH === 'area_length') updatedRow[h] = Math.round(ws.area_length);
+          if (lowerH === 'area_type') updatedRow[h] = ws.area_type;
+
+          // Line level
+          if (lowerH === 'line_name') updatedRow[h] = ws.line_name;
+          if (lowerH === 'line_type') updatedRow[h] = ws.line_type;
+          if (lowerH === 'takt_time_sec') updatedRow[h] = ws.takt_time_sec;
+          if (lowerH === 'capacity_per_shift') updatedRow[h] = ws.capacity_per_shift;
+
+          // Workstation level
+          if (lowerH === 'ws_code') updatedRow[h] = ws.ws_code;
+          if (lowerH === 'ws_name') updatedRow[h] = ws.ws_name;
+          if (lowerH === 'ws_x') updatedRow[h] = Math.round(ws.pos_x);
+          if (lowerH === 'ws_y') updatedRow[h] = Math.round(ws.pos_y);
+          if (lowerH === 'ws_width') updatedRow[h] = Math.round(ws.width);
+          if (lowerH === 'ws_length') updatedRow[h] = Math.round(ws.length);
+          if (lowerH === 'max_operators') updatedRow[h] = ws.max_operators;
+          if (lowerH === 'power_kw') updatedRow[h] = ws.power_requirement_kw;
+          if (lowerH === 'detail') updatedRow[h] = ws.detail || '';
+        });
+
+        // Flow level (optional, if flows exist in original CSV, find corresponding database flow)
+        const hasFlows = headers.some(h => ['from_ws', 'to_ws'].includes(h.toLowerCase()));
+        if (hasFlows) {
+          const flow = databaseFlows.find(f => f.from_code.toLowerCase() === wsCode || f.from_code.toLowerCase() === wsName);
+          if (flow) {
+            headers.forEach(h => {
+              const lowerH = h.toLowerCase();
+              if (lowerH === 'from_ws') updatedRow[h] = flow.from_code;
+              if (lowerH === 'to_ws') updatedRow[h] = flow.to_code;
+              if (lowerH === 'distance') updatedRow[h] = flow.distance || '';
+              if (lowerH === 'transport_type') updatedRow[h] = flow.transport_type || '';
+              if (lowerH === 'transfer_time_sec') updatedRow[h] = flow.avg_transfer_time_sec || '';
+            });
+          } else {
+            headers.forEach(h => {
+              const lowerH = h.toLowerCase();
+              if (['from_ws', 'to_ws', 'distance', 'transport_type', 'transfer_time_sec'].includes(lowerH)) {
+                updatedRow[h] = '';
+              }
+            });
+          }
+        }
+
+        updatedRows.push(updatedRow);
+      } else {
+        // Workstation was not found in active database workstations (deleted)
+        if (!row.ws_code && !row.ws_name) {
+          updatedRows.push(row);
+        }
+      }
+    }
+
+    // Append newly manually-added workstations
+    const addedWorkstations = workstations.filter(w => !usedWcIds.has(w.ws_id));
+    if (addedWorkstations.length > 0) {
+      const flowMap = {};
+      databaseFlows.forEach(f => {
+        if (!flowMap[f.from_code]) flowMap[f.from_code] = f;
+      });
+
+      addedWorkstations.forEach(w => {
+        const newRow = {};
+        headers.forEach(h => {
+          const lowerH = h.toLowerCase();
+          
+          newRow[h] = '';
+
+          // Area level
+          if (lowerH === 'area_name') newRow[h] = w.area_name;
+          if (lowerH === 'area_x') newRow[h] = Math.round(w.area_x);
+          if (lowerH === 'area_y') newRow[h] = Math.round(w.area_y);
+          if (lowerH === 'area_width') newRow[h] = Math.round(w.area_width);
+          if (lowerH === 'area_length') newRow[h] = Math.round(w.area_length);
+          if (lowerH === 'area_type') newRow[h] = w.area_type;
+
+          // Line level
+          if (lowerH === 'line_name') newRow[h] = w.line_name;
+          if (lowerH === 'line_type') newRow[h] = w.line_type;
+          if (lowerH === 'takt_time_sec') newRow[h] = w.takt_time_sec;
+          if (lowerH === 'capacity_per_shift') newRow[h] = w.capacity_per_shift;
+
+          // Workstation level
+          if (lowerH === 'ws_code') newRow[h] = w.ws_code;
+          if (lowerH === 'ws_name') newRow[h] = w.ws_name;
+          if (lowerH === 'ws_x') newRow[h] = Math.round(w.pos_x);
+          if (lowerH === 'ws_y') newRow[h] = Math.round(w.pos_y);
+          if (lowerH === 'ws_width') newRow[h] = Math.round(w.width);
+          if (lowerH === 'ws_length') newRow[h] = Math.round(w.length);
+          if (lowerH === 'max_operators') newRow[h] = w.max_operators;
+          if (lowerH === 'power_kw') newRow[h] = w.power_requirement_kw;
+          if (lowerH === 'detail') newRow[h] = w.detail || '';
+
+          // Flow level
+          const flow = flowMap[w.ws_code] || {};
+          if (lowerH === 'from_ws') newRow[h] = flow.from_code || '';
+          if (lowerH === 'to_ws') newRow[h] = flow.to_code || '';
+          if (lowerH === 'distance') newRow[h] = flow.distance || '';
+          if (lowerH === 'transport_type') newRow[h] = flow.transport_type || '';
+          if (lowerH === 'transfer_time_sec') newRow[h] = flow.avg_transfer_time_sec || '';
+        });
+        updatedRows.push(newRow);
+      });
+    }
+
+    const csvString = Papa.unparse({ fields: headers, data: updatedRows });
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=${encodeURIComponent(version.version_name)}.csv`);
+    res.send(csvString);
+
+  } catch (err) {
+    console.error('Export CSV error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ──────────────────────────────────────────────
 // GET /api/layouts/:id  (single version meta)
 // ──────────────────────────────────────────────
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
   try {
     const pool = await getPool();
     const result = await pool.request()
@@ -134,7 +434,7 @@ router.get('/:id', async (req, res) => {
 // POST /api/layouts/:id/pass-to-admin
 // Developer submits a version for admin review
 // ──────────────────────────────────────────────
-router.post('/:id/pass-to-admin', async (req, res) => {
+router.post('/:id/pass-to-admin', requireAuth, async (req, res) => {
   try {
     const pool = await getPool();
     await pool.request()
@@ -151,8 +451,11 @@ router.post('/:id/pass-to-admin', async (req, res) => {
 // Admin approves a version
 // Body: { reviewed_by }
 // ──────────────────────────────────────────────
-router.post('/:id/approve', async (req, res) => {
+router.post('/:id/approve', requireAuth, async (req, res) => {
   const { reviewed_by = 'admin' } = req.body;
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+  }
   try {
     const pool = await getPool();
     await pool.request()
@@ -174,8 +477,11 @@ router.post('/:id/approve', async (req, res) => {
 // Admin rejects/disapproves a version
 // Body: { reviewed_by, admin_comments }
 // ──────────────────────────────────────────────
-router.post('/:id/reject', async (req, res) => {
+router.post('/:id/reject', requireAuth, async (req, res) => {
   const { reviewed_by = 'admin', admin_comments = '' } = req.body;
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden: Admin access required' });
+  }
   try {
     const pool = await getPool();
     await pool.request()
@@ -198,7 +504,7 @@ router.post('/:id/reject', async (req, res) => {
 // Admin adds/updates comments on a version (without changing status)
 // Body: { admin_comments, reviewed_by }
 // ──────────────────────────────────────────────
-router.post('/:id/comment', async (req, res) => {
+router.post('/:id/comment', requireAuth, async (req, res) => {
   const { admin_comments = '', reviewed_by = 'admin', status } = req.body;
   try {
     const pool = await getPool();
@@ -231,7 +537,7 @@ router.post('/:id/comment', async (req, res) => {
 // Batch-update workstation positions from the canvas
 // Body: { workstations: [{ ws_id, pos_x, pos_y, width, length }] }
 // ──────────────────────────────────────────────
-router.patch('/:draftId/sync', async (req, res) => {
+router.patch('/:draftId/sync', requireAuth, async (req, res) => {
   const { workstations = [] } = req.body;
   try {
     const pool = await getPool();
@@ -255,7 +561,7 @@ router.patch('/:draftId/sync', async (req, res) => {
 // Batch-update area positions/sizes from the canvas
 // Body: { areas: [{ area_id, pos_x, pos_y, width, length }] }
 // ──────────────────────────────────────────────
-router.patch('/:versionId/sync-areas', async (req, res) => {
+router.patch('/:versionId/sync-areas', requireAuth, async (req, res) => {
   const { areas = [] } = req.body;
   try {
     const pool = await getPool();
@@ -279,7 +585,7 @@ router.patch('/:versionId/sync-areas', async (req, res) => {
 // Save full layout state from the visual editor
 // Body: { factory: { ... } }
 // ──────────────────────────────────────────────
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAuth, async (req, res) => {
   const { factory } = req.body;
   const versionId = parseInt(req.params.id);
 
@@ -299,12 +605,17 @@ router.put('/:id', async (req, res) => {
       if (!vRes.recordset.length) throw new Error('Layout version not found');
       const layoutId = vRes.recordset[0].layout_id;
 
-      // 2. Update Canvas/Layout dimensions
+      // 2. Update Canvas/Layout dimensions and Layout Version name
       await transaction.request()
         .input('lid', sql.Int, layoutId)
+        .input('vid', sql.Int, versionId)
+        .input('vname', sql.NVarChar, factory.name || 'CSV Import')
         .input('w',   sql.Float, factory.width || 1200)
         .input('l',   sql.Float, factory.height || 800)
-        .query('UPDATE LAYOUTS SET canvas_width = @w, canvas_length = @l WHERE layout_id = @lid');
+        .query(`
+          UPDATE LAYOUTS SET canvas_width = @w, canvas_length = @l WHERE layout_id = @lid;
+          UPDATE LAYOUT_VERSIONS SET version_name = @vname WHERE layout_version_id = @vid;
+        `);
 
       // 3. Update Areas
       for (const area of factory.areas) {
@@ -356,7 +667,7 @@ router.put('/:id', async (req, res) => {
 // Save a named version (developer "Save Version")
 // Body: { version_name, change_notes }
 // ──────────────────────────────────────────────
-router.post('/:draftId/commit', async (req, res) => {
+router.post('/:draftId/commit', requireAuth, async (req, res) => {
   const { version_name, change_notes } = req.body;
   const draftId = parseInt(req.params.draftId);
   try {

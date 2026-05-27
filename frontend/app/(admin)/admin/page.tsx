@@ -248,12 +248,12 @@ export default function AdminPage() {
                         ) : layout.status === 'rejected' ? (
                           <div className="flex flex-col gap-2 min-w-[120px] max-w-[240px]">
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 border border-red-200 w-fit whitespace-nowrap">Rejected</span>
-                            {layout.adminComments && <p className="text-[10px] text-red-600 bg-red-50 p-2 rounded-lg border border-red-100 break-words leading-tight">{layout.adminComments}</p>}
+                            {(layout.adminComments || layout.admin_comments) && <p className="text-[10px] text-red-600 bg-red-50 p-2 rounded-lg border border-red-100 break-words leading-tight">{layout.adminComments || layout.admin_comments}</p>}
                           </div>
                         ) : layout.status === 'pushed' ? (
                           <div className="flex flex-col gap-2 min-w-[120px] max-w-[240px]">
                             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200 w-fit whitespace-nowrap">Changes Requested</span>
-                            {layout.adminComments && <p className="text-[10px] text-blue-600 bg-blue-50 p-2 rounded-lg border border-blue-100 break-words leading-tight">{layout.adminComments}</p>}
+                            {(layout.adminComments || layout.admin_comments) && <p className="text-[10px] text-blue-600 bg-blue-50 p-2 rounded-lg border border-blue-100 break-words leading-tight">{layout.adminComments || layout.admin_comments}</p>}
                           </div>
                         ) : layout.status === 'pending' ? (
                           <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200 whitespace-nowrap">

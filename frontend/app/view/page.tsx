@@ -39,6 +39,7 @@ export default function ViewPage() {
                         width: data.canvas.width,
                         height: data.canvas.length,
                         gridUnit: 50,
+                        adminComments: data.version.admin_comments || data.version.adminComments || '',
                         areas: (data.areas || []).map((a: any) => ({
                             id: a.area_id.toString(),
                             areaId: a.area_code || a.area_id.toString(),

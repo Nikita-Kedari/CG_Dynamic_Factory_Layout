@@ -48,12 +48,13 @@ export default function EditorPage() {
           if (data.error) throw new Error(data.error);
 
           // Map backend database structure to frontend Factory type
-          const mappedFactory = {
+           const mappedFactory = {
             id: (data.version.layout_id || id).toString(),
             name: data.version.version_name || data.version.layout_name,
             width: data.canvas.width,
             height: data.canvas.length,
             gridUnit: 50,
+            adminComments: data.version.admin_comments || data.version.adminComments || '',
             areas: (data.areas || []).map((a: any) => ({
               id: a.area_id.toString(),
               areaId: a.area_code || a.area_id.toString(),

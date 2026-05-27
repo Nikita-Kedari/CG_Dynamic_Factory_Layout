@@ -2408,6 +2408,19 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
             {isSidebarCollapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronDown className="h-5 w-5 md:rotate-90" />}
           </Button>
 
+          {/* Floating Admin Feedback Notice */}
+          {factory?.adminComments && showComments && (
+            <div className="absolute top-4 left-16 right-4 z-30 max-w-2xl bg-[#0f172a]/95 backdrop-blur-md border border-indigo-500/30 p-4 rounded-2xl shadow-2xl flex items-start gap-3.5 animate-in slide-in-from-top-4 duration-300">
+              <div className="p-2 bg-indigo-600/20 text-indigo-400 rounded-xl border border-indigo-500/20 flex-shrink-0">
+                <MessageSquare className="h-5 w-5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block mb-0.5">Admin Reviewer Feedback</span>
+                <p className="text-xs font-semibold text-indigo-100 leading-relaxed break-words">{factory.adminComments}</p>
+              </div>
+            </div>
+          )}
+
           <canvas
             ref={canvasRef}
             className="w-full h-full block"

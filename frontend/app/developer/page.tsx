@@ -269,18 +269,18 @@ export default function DeveloperPage() {
                                                 ) : l.status === 'pushed' ? (
                                                     <div className="flex flex-col gap-2 min-w-[150px] max-w-[300px]">
                                                         <span className="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full w-fit whitespace-nowrap">Changes Requested</span>
-                                                        {l.adminComments && (
+                                                        {(l.adminComments || l.admin_comments) && (
                                                             <div className="text-[11px] text-blue-600 bg-blue-50 p-2.5 rounded-xl border border-blue-100 leading-relaxed break-words">
-                                                                <strong className="block mb-1 opacity-70">Admin Feedback:</strong> {l.adminComments}
+                                                                <strong className="block mb-1 opacity-70">Admin Feedback:</strong> {l.adminComments || l.admin_comments}
                                                             </div>
                                                         )}
                                                     </div>
                                                 ) : l.status === 'rejected' ? (
                                                     <div className="flex flex-col gap-2 min-w-[150px] max-w-[300px]">
                                                         <span className="inline-block px-2 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full w-fit whitespace-nowrap">Rejected</span>
-                                                        {l.adminComments && (
+                                                        {(l.adminComments || l.admin_comments) && (
                                                             <div className="text-[11px] text-red-600 bg-red-50 p-2.5 rounded-xl border border-red-100 leading-relaxed break-words">
-                                                                <strong className="block mb-1 opacity-70">Admin Comment:</strong> {l.adminComments}
+                                                                <strong className="block mb-1 opacity-70">Admin Comment:</strong> {l.adminComments || l.admin_comments}
                                                             </div>
                                                         )}
                                                     </div>

@@ -2045,9 +2045,21 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
       const isLocal = layoutId.toString().includes('-');
       const baseUrl = isLocal ? '/api' : 'http://localhost:4000/api';
 
+      let token = '';
+      if (typeof window !== 'undefined') {
+        token = localStorage.getItem('factory_auth_token') || '';
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch(`${baseUrl}/layouts/${layoutId}/${endpoint}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           admin_comments: adminComment,
           adminComments: adminComment, // Compatibility with local store

@@ -190,7 +190,12 @@ const computeAStarPath = (
     { i: startI, j: startJ, f: Math.abs(rfx - rtx) + Math.abs(rfy - rty) }
   ];
 
+  let iterations = 0;
   while (openList.length > 0) {
+    iterations++;
+    if (iterations > 1000) {
+      break; // Safeguard against massive search spaces / unresponsive page freezes
+    }
     openList.sort((a, b) => a.f - b.f);
     const curr = openList.shift()!;
     const currKey = `${curr.i},${curr.j}`;
@@ -198,7 +203,9 @@ const computeAStarPath = (
     if (curr.i === endI && curr.j === endJ) {
       const path: [number, number][] = [];
       let tempKey = currKey;
-      while (tempKey) {
+      let pathLengthSafety = 0;
+      while (tempKey && pathLengthSafety < 1000) {
+        pathLengthSafety++;
         const [iStr, jStr] = tempKey.split(',');
         const i = parseInt(iStr);
         const j = parseInt(jStr);
@@ -1809,7 +1816,9 @@ export function GridEditor({ onSave, onLayoutIdChange, initialFactory, isAdmin =
 
     let targetX = area.x + 50;
     let targetY = area.y + 100;
-    while (checkCollision(targetX, targetY, '', 100, 100)) {
+    let targetSearchCount = 0;
+    while (checkCollision(targetX, targetY, '', 100, 100) && targetSearchCount < 500) {
+      targetSearchCount++;
       targetX += 110;
       if (targetX + 100 > area.x + area.width) {
         targetX = area.x + 50;
